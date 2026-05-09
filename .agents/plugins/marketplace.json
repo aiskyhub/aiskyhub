@@ -1,0 +1,20 @@
+{
+  "name": "aiskyhub",
+  "interface": {
+    "displayName": "aiskyhub Marketplace"
+  },
+  "plugins": [
+    {
+      "name": "codex-with-cc",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/xdd666t/codex_with_cc"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    }
+  ]
+}
