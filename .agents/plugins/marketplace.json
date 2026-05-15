@@ -1,7 +1,7 @@
 {
   "name": "aiskyhub",
   "interface": {
-    "displayName": "aiskyhub Marketplace"
+    "displayName": "AISkyHub"
   },
   "plugins": [
     {
