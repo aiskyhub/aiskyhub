@@ -6,7 +6,7 @@ aiskyhub 的个人插件市场入口，维护 Codex 的 marketplace 元数据。
 
 | 插件 | 用途 | 源码 |
 |---|---|---|
-| `codex-with-cc` | 让 Codex 主线程负责任务拆解、派工、审核的工作流插件。 | `https://github.com/xdd666t/codex_with_cc` |
+| `codex-with-cc` | 让 Codex 主线程负责任务拆解、派工、审核的工作流插件。 | `https://github.com/aiskyhub/codex_with_cc` |
 
 ## 目录结构
 
