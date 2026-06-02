@@ -8,7 +8,7 @@
       "name": "codex-with-cc",
       "source": {
         "source": "url",
-        "url": "https://github.com/aiskyhub/codex_with_cc"
+        "url": "https://github.com/shaoqing404/codex_with_cc_plus"
       },
       "policy": {
         "installation": "INSTALLED_BY_DEFAULT",
