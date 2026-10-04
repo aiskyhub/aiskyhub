@@ -1,0 +1,4 @@
+interface:
+  display_name: "小说转完整漫画"
+  short_description: "先完成全书剧本并多轮校验，再以统一优雅的画风绘制、排版和导出完整漫画"
+  default_prompt: "使用 $novel-to-comic 将我提供的小说忠实改编为完整漫画，先完成通篇剧本并反复自校验，再以统一、优雅、耐读的美术风格绘制和排版，可参考题材相近的连载漫画。"

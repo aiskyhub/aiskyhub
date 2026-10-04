@@ -1,0 +1,35 @@
+{
+  "outline": "",
+  "ending": "",
+  "style": {
+    "genre": "",
+    "look": "",
+    "palette": "",
+    "selection_reason": "",
+    "art_direction": {
+      "linework": "干净轮廓线，外轮廓略重于内部细节；纹理只用于必要材质。",
+      "shape_language": "稳定人物比例和各自轮廓；表情夸张程度按题材统一。",
+      "shading": "清楚的主要明暗层次，局部柔和过渡，保留表情和动作的可读性。",
+      "color_rules": "协调的主色与少量局部强调色；稳定肤色和角色识别色。",
+      "lighting": "光源方向清楚，按场景调整冷暖与对比；夜景和回忆变化有明确范围。",
+      "backgrounds": "建立场景时交代空间，人物交流时适度简化；前中后景有层次。",
+      "composition": "每格有主要视觉中心；动作、视线与文字空间共同组织阅读动线。",
+      "effects": "速度线、粒子和光晕服务真实动作或能力，保持强度与造型一致。",
+      "lettering": "清晰正文、统一气泡与旁白层级，留白充分；不以缩小字号解决拥挤。"
+    },
+    "references": [],
+    "format": "pages",
+    "reading_direction": "ltr",
+    "width": 1536,
+    "height": 2176,
+    "font_size": 46,
+    "max_segment_height": 6000
+  },
+  "characters": [],
+  "settings": [],
+  "events": [],
+  "scenes": [],
+  "panels": [],
+  "pages": [],
+  "source_dispositions": []
+}

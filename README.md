@@ -1,6 +1,6 @@
 # aiskyhub
 
-aiskyhub 的个人插件市场入口，维护 Codex 的 marketplace 元数据。这个仓库只负责插件市场清单；具体插件源码放在独立插件仓库中。
+aiskyhub 的个人插件市场入口，维护 Codex 的 marketplace 元数据，以及独立目录中的通用技能。具体插件源码放在独立插件仓库中。
 
 ## 当前插件
 
@@ -15,12 +15,25 @@ aiskyhub/
 ├── .agents/
 │   └── plugins/
 │       └── marketplace.json      # Codex marketplace
+├── novel_to_comic_skills/         # 通用小说转完整漫画技能、脚本及测试
 ├── docs/
 │   └── superpowers/
 │       ├── plans/
 │       └── specs/
 └── README.md
 ```
+
+## 通用技能
+
+| 技能 | 入口 | 用途 |
+|---|---|---|
+| `novel-to-comic` | [novel_to_comic_skills/SKILL.md](novel_to_comic_skills/SKILL.md) | 先完成通篇剧本与多轮校验，再以统一优雅的美术风格维护人物一致性、逐格绘制、排版和导出完整漫画。 |
+
+调用示例：`$novel-to-comic 将我提供的小说忠实改编为完整漫画。`
+
+美术规范与连载漫画参考方法见 [art-direction.md](novel_to_comic_skills/references/art-direction.md)，支持整宽重点画格与双格行组合、统一线条配色及跨页风格检查。
+
+技能目录包含 `agents/`、`references/`、`scripts/`、`assets/` 和 `tests/`，作品资料及图像保存在各自作品项目中。
 
 ## Codex
 
