@@ -96,11 +96,20 @@ class PipelineTests(unittest.TestCase):
         self.add_reviews()
         self.invoke('lock-script')
 
+    def begin_one(self, panel, prompt):
+        """Exercise the unified batch interface for existing single-frame scenarios."""
+        plan = {'panels': [{'panel_id': panel, 'target_region': [0, 0, 1, 1],
+                            'min_pixels': [1536, 1024]}]}
+        result = self.invoke('begin-batch', plan=self.json_file(plan), prompt=str(prompt))
+        if result['already_accepted']:
+            return {'already_accepted': True, 'path': result['reused'][0]['path']}
+        return {**result['panels'][0], 'batch_id': result['batch_id']}
+
     def image_file(self, color='white'):
         from PIL import Image
         import uuid
         path = self.base / ('mechanical-' + uuid.uuid4().hex[:8] + '.png')
-        Image.new('RGB', (600, 400), color).save(path)
+        Image.new('RGB', (1536, 1024), color).save(path)
         return str(path)
 
     def qa(self, keys, reviewed_ids=None, image_sha256=None, reference_visual_key=None,
@@ -108,6 +117,7 @@ class PipelineTests(unittest.TestCase):
         report = {'checks': {k: True for k in keys},
                   'reviewed_ids': reviewed_ids or (['char-a'] if keys == cp.REFERENCE_CHECKS else [p['id'] for p in cp.project_load(self.root)['script']['panels']]),
                   'comparisons': [], 'findings': [],
+                  'detail_notes': '机械夹具，只检查原生像素与报告字段，不宣称艺术细节达标。',
                   'elegance_notes': {k: '机械夹具，仅检查字段关卡，非真实美感结论。'
                                      for k in ('linework', 'color_and_light', 'visual_hierarchy')},
                   'evidence': '机械夹具，仅用于文件/流程回归，非真实图像验收。'}
@@ -129,6 +139,15 @@ class PipelineTests(unittest.TestCase):
                        inputs['reference_visual_key'])
 
     def panel_qa(self, panel_id, attempt_number, image_path, reviewed_ids=None):
+        attempt = next(a for a in cp.project_load(self.root)['art']['panels'][panel_id]
+                       if a['number'] == attempt_number)
+        batch = cp.project_load(self.root)['art']['batches'][attempt['batch_id']]
+        if not batch['crops']:
+            from PIL import Image
+            with Image.open(image_path) as image:
+                region = [0, 0, image.width, image.height]
+            self.invoke('split-batch', batch=batch['id'], file=str(image_path),
+                        regions=self.json_file({panel_id: region}))
         inputs = self.invoke('qa-inputs', panel=panel_id, attempt=attempt_number, file=str(image_path))
         return self.qa(cp.PANEL_CHECKS, reviewed_ids or inputs['reviewed_ids'], inputs['image_sha256'],
                        attempt_bindings=inputs['attempt_bindings'])
@@ -148,7 +167,7 @@ class PipelineTests(unittest.TestCase):
         for panel in cp.project_load(self.root)['script']['panels']:
             prompt = self.base / 'prompt.txt'
             prompt.write_text('机械测试，不调用图像服务', encoding='utf-8')
-            attempt = self.invoke('begin-panel', panel=panel['id'], prompt=str(prompt))
+            attempt = self.begin_one(panel=panel['id'], prompt=str(prompt))
             image = self.image_file((colors or {}).get(panel['id'], '#b8c9d2'))
             self.invoke('finish-panel', panel=panel['id'], attempt=attempt['attempt'],
                         file=image, qa=self.panel_qa(panel['id'], attempt['attempt'], image))
@@ -376,13 +395,13 @@ class PipelineTests(unittest.TestCase):
         prompt = self.base / 'prompt.txt'
         prompt.write_text('机械测试', encoding='utf-8')
         for i in range(3):
-            attempt = self.invoke('begin-panel', panel='p1', prompt=str(prompt))
+            attempt = self.begin_one(panel='p1', prompt=str(prompt))
             with self.assertRaises(cp.GateError):
-                self.invoke('begin-panel', panel='p1', prompt=str(prompt))
+                self.begin_one(panel='p1', prompt=str(prompt))
             self.invoke('fail-panel', panel='p1', attempt=attempt['attempt'], reason='机械失败测试')
             prompt.write_text('微小提示词变动' + str(i), encoding='utf-8')
         with self.assertRaises(cp.GateError):
-            self.invoke('begin-panel', panel='p1', prompt=str(prompt))
+            self.begin_one(panel='p1', prompt=str(prompt))
 
     def test_reference_or_prompt_file_change_invalidates_art(self):
         self.locked()
@@ -409,7 +428,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(2, self.invoke('status')['panels_accepted'])
         prompt = self.base / 'prompt.txt'
         prompt.write_text('此提示不会被调用', encoding='utf-8')
-        self.assertTrue(self.invoke('begin-panel', panel='p1', prompt=str(prompt))['already_accepted'])
+        self.assertTrue(self.begin_one(panel='p1', prompt=str(prompt))['already_accepted'])
 
     def test_exports_real_order_hashes_completion_and_missing_file(self):
         self.exported()

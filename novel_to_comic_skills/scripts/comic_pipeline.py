@@ -16,14 +16,14 @@ from pathlib import Path
 
 from comic_sources import SourceError, extract, sha_file
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 REVIEW_CHECKS = {
     'coverage': ['all_source_read', 'events_preserved', 'arcs_preserved', 'ending_preserved'],
     'continuity': ['causality', 'timeline', 'identity', 'states', 'knowledge_and_reveals'],
     'comic': ['drawable_panels', 'dialogue_and_speakers', 'reading_order', 'pacing', 'text_density'],
 }
 PANEL_CHECKS = ['identity', 'continuity', 'composition', 'drawing_quality', 'no_unwanted_text',
-                'gender_readability', 'distinctiveness', 'body_design', 'design_tier_fit', 'visual_elegance']
+                'gender_readability', 'distinctiveness', 'body_design', 'design_tier_fit', 'visual_elegance', 'native_detail']
 REFERENCE_CHECKS = ['identity', 'distinctiveness', 'angles_and_expressions', 'source_faithfulness',
                     'gender_readability', 'body_design', 'design_tier_fit', 'visual_elegance']
 LAYOUT_CHECKS = ['text_accuracy', 'reading_order', 'speaker_assignment', 'face_visibility', 'visual_elegance']
@@ -72,7 +72,7 @@ def project_load(root):
         raise GateError('project: expected an object.')
     version = project.get('schema_version')
     if version != SCHEMA_VERSION:
-        raise GateError('Unsupported project schema; create a new schema v2 project and re-enter reviewed inputs.')
+        raise GateError('Unsupported project schema; only schema v3 is supported. No migration is provided.')
     return project
 
 
@@ -724,13 +724,16 @@ def validate_reference_qa(report, character_ids, image_sha256, reference_visual_
 
 def validate_panel_qa(report, panel_id, attempt_number, render_fingerprint, image_sha256):
     validate_qa(report, PANEL_CHECKS, 'panel')
-    if panel_id not in report['reviewed_ids']:
-        raise GateError('Panel QA reviewed_ids must include the actual panel ID: ' + str(panel_id))
+    if not nonempty(report.get('detail_notes')):
+        raise GateError('Panel QA detail_notes must describe native-size and composed-size detail observations.')
+    if report['reviewed_ids'] != [panel_id]:
+        raise GateError('Panel QA reviewed_ids must contain only the actual panel ID: ' + str(panel_id))
     if report.get('image_sha256') != image_sha256:
         raise GateError('Panel QA image_sha256 must match the exact submitted panel image bytes.')
     bindings = report.get('attempt_bindings')
     binding = bindings.get(panel_id) if isinstance(bindings, dict) else None
-    if (not isinstance(binding, dict) or type(binding.get('attempt')) is not int or
+    if (not isinstance(bindings, dict) or set(bindings) != {panel_id} or
+            not isinstance(binding, dict) or type(binding.get('attempt')) is not int or
             binding.get('attempt') != attempt_number or binding.get('render_hash') != render_fingerprint):
         raise GateError(f'Panel QA attempt_bindings[{panel_id}] must match this attempt number and render_hash.')
 
@@ -772,6 +775,16 @@ def art_structure_errors(project):
         for panel_id, binding in bindings.items():
             if not nonempty(panel_id) or not isinstance(binding, dict):
                 errors.append(f'art.bindings[{panel_id}]: expected a panel ID and binding object.')
+    batches = art.get('batches')
+    if not isinstance(batches, dict):
+        errors.append('art.batches: expected an object keyed by batch ID.')
+    else:
+        for batch_id, batch in batches.items():
+            if (not nonempty(batch_id) or not isinstance(batch, dict) or
+                    not isinstance(batch.get('panels'), list) or not 1 <= len(batch['panels']) <= 4 or
+                    any(not isinstance(item, dict) or not nonempty(item.get('panel_id')) or
+                        type(item.get('attempt')) is not int for item in batch['panels'])):
+                errors.append(f'art.batches[{batch_id}]: malformed batch record.')
     return errors
 
 
@@ -1069,6 +1082,8 @@ def accepted_panel(root, project, panel):
                     continue
                 validate_panel_qa(attempt['qa'], panel['id'], attempt.get('number'), fingerprint,
                                   attempt.get('sha256'))
+                from comic_batches import validate_panel_file
+                validate_panel_file(root, project, panel, attempt, path)
                 return attempt
             except (KeyError, GateError, TypeError, ValueError, OSError):
                 continue
@@ -1323,6 +1338,8 @@ def qa_inputs(root, project, args):
             if not image_path.is_file():
                 raise GateError('Generated panel image missing.')
             actual_sha = sha_file(image_path)
+            from comic_batches import validate_panel_file
+            validate_panel_file(root, project, panel, attempt, image_path)
             qa_hash = current_hash
         else:
             raise GateError('Panel attempt is not pending.')
@@ -1376,7 +1393,7 @@ def run(args):
         project = {'schema_version': SCHEMA_VERSION, 'title': args.title or Path(args.source[0]).stem,
                    'created_at': now(), 'source': source, 'source_index_hash': index_hash(source),
                    'script': template, 'reviews': [], 'script_lock': None,
-                   'art': {'references': [], 'panels': {}, 'bindings': {}},
+                   'art': {'references': [], 'panels': {}, 'bindings': {}, 'batches': {}},
                    'layout': None, 'exports': None, 'final_review': None}
         for chapter in source['chapters']:
             text = '\n'.join(u['text'] for u in source['units'] if u['chapter_id'] == chapter['id'])
@@ -1646,65 +1663,12 @@ def run(args):
         return_value = {'ok': True, 'panel_id': args.panel, 'appearance_versions': versions, 'reference_ids': references}
         save(root, project)
         return return_value
-    elif command == 'begin-panel':
-        assert_script_lock(project, root)
-        panel = next((p for p in project['script']['panels'] if isinstance(p, dict) and p.get('id') == args.panel), None)
-        if panel is None:
-            raise GateError('Panel ID missing.')
-        accepted = accepted_panel(root, project, panel)
-        if accepted:
-            return {'already_accepted': True, 'path': str(inside(root, accepted['path']))}
-        references = select_references(root, project, panel)
-        fingerprint = render_hash(root, project, panel, references)
-        attempts = project['art']['panels'].setdefault(panel['id'], [])
-        if not isinstance(attempts, list):
-            raise GateError('Panel attempt ledger is malformed.')
-        relevant = [a for a in attempts if a['render_hash'] == fingerprint]
-        if any(a['status'] == 'pending' for a in relevant):
-            raise GateError('Unfinished attempt exists; finish/fail it before another image call.')
-        if len(relevant) >= 3:
-            raise GateError('Three attempts exhausted for these visual inputs; intervention is required.')
-        prompt = Path(args.prompt).read_text(encoding='utf-8-sig')
-        if not nonempty(prompt):
-            raise GateError('Persist a real drawing prompt before calling image generation.')
-        number = len(attempts) + 1
-        prompt_path = f'prompts/{panel["id"]}-{number:03d}.txt'
-        target = inside(root, prompt_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(prompt, encoding='utf-8')
-        attempt = {'number': number, 'status': 'pending', 'render_hash': fingerprint,
-                   'created_script_hash': digest(project['script']), 'prompt_path': prompt_path,
-                   'prompt_sha256': sha_file(target), 'reference_ids': [r['id'] for r in references], 'at': now()}
-        attempts.append(attempt)
-        save(root, project)
-        reference_bindings = [
-            {'id': reference['id'], 'path': str(inside(root, reference['path'])),
-             'purpose': reference.get('purpose', 'combined'), 'subjects': reference.get('subjects', [])}
-            for reference in references]
-        # Surface scene, setting, and prop references explicitly so the image
-        # generation call receives the same assets checked by render_hash.
-        supporting_paths = []
-        scene_by_id = {item.get('id'): item for item in project['script'].get('scenes', [])
-                       if isinstance(item, dict)}
-        setting_by_id = {item.get('id'): item for item in project['script'].get('settings', [])
-                          if isinstance(item, dict)}
-        prop_by_id = {item.get('id'): item for item in project['script'].get('props', [])
-                      if isinstance(item, dict)}
-        scene = scene_by_id.get(panel.get('scene_id'), {})
-        setting = setting_by_id.get(scene.get('setting_id'), {}) if isinstance(scene, dict) else {}
-        relevant_props = set(panel.get('prop_ids', [])) | set(scene.get('prop_ids', []) if isinstance(scene, dict) else [])
-        for entity in [scene, setting, *(prop_by_id[prop_id] for prop_id in sorted(relevant_props)
-                                         if prop_id in prop_by_id)]:
-            if not isinstance(entity, dict):
-                continue
-            for relative in entity.get('reference_paths', []):
-                absolute = str(inside(root, relative))
-                if absolute not in supporting_paths:
-                    supporting_paths.append(absolute)
-        return {'attempt': number, 'prompt': str(target), 'render_hash': fingerprint,
-                'referenced_image_paths': [item['path'] for item in reference_bindings],
-                'reference_bindings': reference_bindings,
-                'supporting_reference_paths': supporting_paths}
+    elif command == 'begin-batch':
+        from comic_batches import begin_batch
+        return begin_batch(root, project, args.plan, args.prompt)
+    elif command == 'split-batch':
+        from comic_batches import split_batch
+        return split_batch(root, project, args.batch, args.file, args.regions)
     elif command == 'fail-panel':
         attempts = project['art']['panels'].get(args.panel, [])
         attempt = next((a for a in attempts if isinstance(a, dict) and a.get('number') == args.attempt), None)
@@ -1726,6 +1690,8 @@ def run(args):
         if attempt.get('render_hash') != current_hash:
             raise GateError('Attempt inputs changed during generation; settle it with fail-panel --outcome stale.')
         image_sha256 = sha_file(Path(args.file))
+        from comic_batches import validate_panel_file
+        validate_panel_file(root, project, panel, attempt, args.file)
         report = load_json(args.qa)
         try:
             validate_panel_qa(report, args.panel, attempt.get('number'), current_hash, image_sha256)
@@ -1849,6 +1815,8 @@ def run(args):
         refs = art_data.get('references', [])
         refs = refs if isinstance(refs, list) else []
         source_warnings = external_source_warnings(project)
+        from comic_batches import batch_summary
+        batch_counts, batches = batch_summary(root, project, accepted, getattr(args, 'plan', None))
         return {'complete': complete, 'source_scope': source_data.get('scope_note'),
                 'chapters_with_body': sum(bool(c.get('has_body')) for c in source_chapters),
                 'chapters_read': sum(bool(c.get('has_body') and c.get('read')) for c in source_chapters),
@@ -1866,8 +1834,8 @@ def run(args):
                                      'pending_attempts': sum(a['status'] == 'pending' for a in attempt_summary),
                                      'panels_remaining': len(panels) - len(accepted),
                                      'current_input_attempt_slots': remaining_slots,
-                                     'panels_with_unknown_budget': unknown_budget_count},
-                'panel_blockers': panel_blockers, 'attempts': attempt_summary}
+                                     'panels_with_unknown_budget': unknown_budget_count, **batch_counts},
+                'panel_blockers': panel_blockers, 'attempts': attempt_summary, 'batches': batches}
     else:
         raise GateError('Unknown command.')
     save(root, project)
@@ -1880,7 +1848,7 @@ def parser():
     for name in ('init', 'preflight', 'qa-inputs', 'chapter', 'script-chapter', 'resolve-issue', 'confirm-source',
                  'mark-read', 'set-script', 'set-script-chapter', 'impact', 'check-script', 'review',
                  'lock-script', 'assert-art', 'register-reference', 'bind-panel',
-                 'begin-panel', 'finish-panel', 'fail-panel', 'compose',
+                 'begin-batch', 'split-batch', 'finish-panel', 'fail-panel', 'compose',
                  'review-layout', 'export', 'verify-export', 'complete', 'status'):
         sub = subs.add_parser(name)
         sub.add_argument('--project', required=True)
@@ -1916,12 +1884,19 @@ def parser():
             selection.add_argument('--bindings')
         if name in ('register-reference', 'finish-panel'):
             sub.add_argument('--qa', required=True)
-        if name in ('begin-panel', 'bind-panel', 'finish-panel', 'fail-panel'):
+        if name in ('bind-panel', 'finish-panel', 'fail-panel'):
             sub.add_argument('--panel', required=True)
         if name in ('finish-panel', 'fail-panel'):
             sub.add_argument('--attempt', type=int, required=True)
-        if name == 'begin-panel':
+        if name == 'begin-batch':
+            sub.add_argument('--plan', required=True)
             sub.add_argument('--prompt', required=True)
+        if name == 'preflight':
+            sub.add_argument('--plan')
+        if name == 'split-batch':
+            sub.add_argument('--batch', required=True)
+            sub.add_argument('--file', required=True)
+            sub.add_argument('--regions', required=True)
         if name == 'bind-panel':
             sub.add_argument('--bindings', required=True, help='JSON text or path to a JSON file containing appearance_versions and reference_ids.')
         if name == 'fail-panel':

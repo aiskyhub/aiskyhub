@@ -1,6 +1,6 @@
-# 项目与数据契约（版本 2）
+# 项目与数据契约（版本 3）
 
-`project.json` 由 helper 创建和更新，包含 source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。仅支持 schema_version=2；不转换旧结构，也不补历史通过结论。
+`project.json` 由 helper 创建和更新，包含 source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。仅支持 schema_version=3；其他版本明确拒绝，不提供迁移，也不修改已有旧项目或补历史通过结论。
 
 ## Source
 
@@ -57,7 +57,8 @@ continuity：causality/timeline/identity/states/knowledge_and_reveals。
 comic：drawable_panels/dialogue_and_speakers/reading_order/pacing/text_density。
 
 参考图报告检查项：identity/distinctiveness/angles_and_expressions/source_faithfulness/gender_readability/body_design/design_tier_fit/visual_elegance。
-画格报告：identity/continuity/composition/drawing_quality/no_unwanted_text/gender_readability/distinctiveness/body_design/design_tier_fit/visual_elegance。
+画格报告：identity/continuity/composition/drawing_quality/no_unwanted_text/gender_readability/distinctiveness/body_design/design_tier_fit/visual_elegance/native_detail。
+画格报告的 reviewed_ids 和 attempt_bindings 只能包含当前一个画格，不共用整图结论；另需非空 detail_notes，记录裁切图在原生尺寸和成品阅读尺寸的面部、线条、动作、道具细节及实际比较对象。
 以上视觉报告共同需要非空 evidence、实际 reviewed_ids、image_sha256 与 findings；参考还需 comparisons 和 reference_visual_key，画格还需 attempt_bindings（具体格式见下文）。
 
 页面报告另外需要 `input_hash` 和全部实际 `reviewed_page_ids`；检查项 text_accuracy/reading_order/speaker_assignment/face_visibility/visual_elegance。
@@ -74,7 +75,7 @@ layout 保存全部实际页面/分段、画格顺序、字体和 PNG 指纹；e
 额外场景/道具图片参考写入对应对象的 reference_paths/reference_hashes，均使用项目内相对路径与实际 SHA256，数组长度一致。画格通过 prop_ids 指定使用的道具；发出提示词前核验真实文件内容，改变参考会使关联绘图失效。
 
 
-## V2 人物与制作绑定
+## 人物与制作绑定
 
 character 保留 importance，新增 design_tier=lead/core/background；appearance={gender_presentation,requirements,source_unit_ids}，gender_presentation=feminine/masculine/source_defined，表示美术表达而非程序推断身份。source_defined 必须说明原作特殊设定及有效来源。identity_card 包含 face/eyes_brows/nose_mouth/body/posture/temperament 非空描述及非空 invariants 数组。
 
@@ -94,9 +95,9 @@ purpose=portrait/full_body/turnaround/expressions/pose/combined；region=null �
 
 报告检查项见上文 Reports。参考 reviewed_ids 为真实人物 ID，正文为画格 ID；comparisons=[{character_ids:[A,B],evidence}] 记录真实比较。`image_sha256` 必须匹配实际验收文件。参考、正文与页面共同含 `elegance_notes={linework,color_and_light,visual_hierarchy}`，各项为实际观察的非空描述，分别说明线条、颜色光线和视觉层次。填写布尔值不替代看图，重大未解决缺陷不能通过。
 
-参考报告的 `reference_visual_key` 绑定图像内容、角色设计、用途与角色/版本/区域；画格的 `attempt_bindings={"实际画格ID":{"attempt":实际尝试号,"render_hash":"实际视觉输入指纹"}}` 绑定本次尝试。使用 `qa-inputs` 读取这些机械字段，再由主代理实际看图填写证据与检查结论；命令不生成通过报告。`begin-panel` 同时返回 render_hash。登记同图、同设计与同参考语义的新 ID 不会刷新视觉输入的尝试预算，参考区域或用途发生实际变化则需要复核。
+参考报告的 `reference_visual_key` 绑定图像内容、角色设计、用途与角色/版本/区域；画格的 `attempt_bindings={"实际画格ID":{"attempt":实际尝试号,"render_hash":"实际视觉输入指纹"}}` 绑定本次尝试。使用 `qa-inputs` 读取这些机械字段，再由主代理实际看图填写证据与检查结论；命令不生成通过报告。`begin-batch` 为每个实际画格返回 render_hash。登记同图、同设计与同参考语义的新 ID 不会刷新视觉输入的尝试预算，参考区域或用途发生实际变化则需要复核。
 
-## V2 页面、气泡与影响范围
+## 页面、气泡与影响范围
 
 page.narrative={purpose,new_information,emotion,focus_panel_id,page_turn} 用于记录页面任务、信息、情绪、重点与翻页关系；新增创作应填写。page.row_weights 可与实际 rows 平行，例如 [[1],[0.6,0.4],[1]]，每行数量对应画格且所有权重大于零。rtl 按叙事顺序反转物理摆放，保留不等宽画格自己的权重。
 
@@ -107,3 +108,31 @@ lettering_mode=band/bubbles（画格优先于 style，默认 band）。bubbles �
 compose 保存可编辑排版 manifest、字体内容及各页面指纹。页漫画布严格等于 width×height，内容溢出时调整相应页面的行、气泡或分格并重审；条漫按完整行拆为不超过 max_segment_height 的片段。字号、字体、页序、对白和气泡变化只更新排版；视觉风格、角色造型、动作、构图和实际参考变化才影响绘图。
 
 script-chapter 输出章节集合及相关人物、场景与相邻状态；set-script-chapter 仅合并该章的 events/scenes/panels/pages，完整冻结关卡仍检查全书。impact 对候选完整剧本给出修改影响且不写项目。
+
+
+## 批次计划、裁切与尝试
+
+单格和多格都使用 begin-batch；计划不修改冻结剧情，只描述本次生成的制作格区和最低像素。panels 为 1–4 项，ID 不重复、按剧本顺序排列；target_region 是归一化 [x,y,w,h]，区域不能重叠；min_pixels 是最低原生 [width,height]，不能低于成品展示尺寸。没有 aspect_ratio 时用计划像素比例确定预期高度，实际验收再按裁切图与排版画幅核查无需放大。
+
+```json
+{
+  "panels": [
+    {"panel_id":"p1","target_region":[0,0,0.5,1],"min_pixels":[1536,1024]},
+    {"panel_id":"p2","target_region":[0.5,0,0.5,1],"min_pixels":[1536,1024]}
+  ]
+}
+```
+
+以上尺寸只是计划示例，不能当作工具保证；按作品真实画幅、复杂度与输出能力调整。begin-batch 返回 batch_id、panels（含 attempt/render_hash/reference_ids）、reused、prompt 和去重 referenced_image_paths；generation_required=false 表示无需生成。部分复用时以实际 panels 为准，只有一个剩余格时 target_region 自动改为整图，登记提示词增加实际清单。
+
+实际格区 JSON 以本次生成的每个画格 ID 为键，值是整数像素 [x,y,w,h]，必须恰好覆盖实际生成格，不包含 reused。示例：
+
+```json
+{"p1":[0,0,1536,1024],"p2":[1536,0,1536,1024]}
+```
+
+split-batch 先保留原图，再检查格区结构；结构错误不提取，像素不足的格单独加入 rejected_panels，其他格提取保留。返回 panels 中包含实际可用裁切的 file、sha256、region、width、height 及原尝试绑定；尚未通过 QA。登记过的裁切格区不可更改，未提取格可修正格界后用同一原图恢复。
+
+art.batches 按 batch_id 索引，记录实际 panels、requested_plan、plan_hash、实际提示词路径/哈希、参考用途和对象、原图路径/哈希/尺寸、crops、extraction_issues 与时间。每个 art.panels 尝试必须有 batch_id；每格的 number、render_hash、状态、参考和 QA 仍独立。一个批次实际生成一次，每格各增加一次尝试；分组与提示词不参与刷新视觉输入预算。
+
+QA、通过记录及后续复用都要求登记原图、提示词和裁切文件仍与哈希一致，且本格输入和尝试号一致。只有 finish-panel 才登记通过。纯裁切不计新绘图尝试；新生成或图像编辑必须建立新批次。preflight 的队列可写成 {"batches":[批次计划,批次计划]}，各组不能共享画格 ID，接口只读且不预留尝试。

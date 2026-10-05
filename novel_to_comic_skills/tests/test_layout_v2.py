@@ -33,18 +33,19 @@ class LayoutSafetyMechanicalTests(unittest.TestCase):
         with self.assertRaisesRegex(cp.GateError, r'style\.height.*unsafe'):
             cl.compose(f.root, project)
 
-    def test_strip_extreme_panel_ratio_fails_with_segment_style_field(self):
+    def test_strip_extreme_panel_ratio_is_blocked_before_generation(self):
         f = self.f
         script = f.mixed_script(max_height=6000)
         script['panels'][0]['aspect_ratio'] = 0.001
         f.invoke('set-script', file=f.json_file(script))
         f.add_reviews()
         f.invoke('lock-script')
-        f.accept_all()
-        project = cp.project_load(f.root)
-
-        with self.assertRaisesRegex(cp.GateError, r'Page page-mixed row 1 panel p1: style\.max_segment_height'):
-            cl.compose(f.root, project)
+        f.reference()
+        prompt = f.base / 'prompt.txt'
+        prompt.write_text('mechanical only', encoding='utf-8')
+        with self.assertRaisesRegex(cp.GateError, 'composed display size'):
+            f.begin_one(panel='p1', prompt=prompt)
+        self.assertEqual({}, cp.project_load(f.root)['art']['panels'])
 
     def test_pdf_html_and_cbz_tampering_each_fails_integrity_gate(self):
         f = self.f

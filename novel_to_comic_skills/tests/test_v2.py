@@ -1,4 +1,4 @@
-"""Behavioral regressions for v2. Colored fixtures are never art-quality evidence."""
+"""Behavioral regressions for current production gates. Colored fixtures are never art-quality evidence."""
 import copy
 import json
 import subprocess
@@ -11,7 +11,7 @@ import test_pipeline as fixtures
 cp, cl = fixtures.cp, fixtures.cl
 
 
-class VersionTwoTests(unittest.TestCase):
+class ProductionGateTests(unittest.TestCase):
     def setUp(self):
         self.f = fixtures.PipelineTests('runTest')
         self.f.setUp()
@@ -37,7 +37,7 @@ class VersionTwoTests(unittest.TestCase):
         f = self.f
         f.locked(); f.reference()
         prompt = f.base/'prompt.txt'; prompt.write_text('mechanical', encoding='utf-8')
-        attempt = f.invoke('begin-panel', panel='p1', prompt=str(prompt))
+        attempt = f.begin_one(panel='p1', prompt=str(prompt))
         script = cp.project_load(f.root)['script']; script['panels'][0]['action'] += '新动作'
         f.invoke('set-script', file=f.json_file(script))
         f.invoke('fail-panel', panel='p1', attempt=attempt['attempt'], reason='输入过期', outcome='stale')
@@ -90,7 +90,7 @@ class VersionTwoTests(unittest.TestCase):
     def test_preflight_counts_pending_and_input_budget(self):
         f=self.f;f.locked();f.reference()
         prompt=f.base/'prompt.txt';prompt.write_text('mechanical',encoding='utf-8')
-        f.invoke('begin-panel',panel='p1',prompt=prompt)
+        f.begin_one(panel='p1',prompt=prompt)
         before=f.invoke('preflight')['preflight_counts']
         self.assertEqual(6,before['initial_panel_attempt_budget'])
         self.assertEqual(1,before['attempts_recorded'])
@@ -225,23 +225,23 @@ class VersionTwoTests(unittest.TestCase):
         prompt=f.base/'prompt.txt';prompt.write_text('mechanical',encoding='utf-8')
         f.invoke('bind-panel',panel='p1',bindings=f.json_file(
             {'appearance_versions':{'char-a':'base'},'reference_ids':[first,second]}))
-        one=f.invoke('begin-panel',panel='p1',prompt=prompt)
+        one=f.begin_one(panel='p1',prompt=prompt)
         f.invoke('fail-panel',panel='p1',attempt=one['attempt'],reason='mechanical closure',outcome='cancelled')
         f.invoke('bind-panel',panel='p1',bindings=f.json_file(
             {'appearance_versions':{'char-a':'base'},'reference_ids':[second,first]}))
-        two=f.invoke('begin-panel',panel='p1',prompt=prompt)
+        two=f.begin_one(panel='p1',prompt=prompt)
         self.assertEqual(one['render_hash'],two['render_hash'])
         f.invoke('fail-panel',panel='p1',attempt=two['attempt'],reason='mechanical closure',outcome='cancelled')
         duplicate=register(first_image)
         f.invoke('bind-panel',panel='p1',bindings=f.json_file(
             {'appearance_versions':{'char-a':'base'},'reference_ids':[duplicate,second]}))
-        three=f.invoke('begin-panel',panel='p1',prompt=prompt)
+        three=f.begin_one(panel='p1',prompt=prompt)
         f.invoke('fail-panel',panel='p1',attempt=three['attempt'],reason='mechanical closure',outcome='cancelled')
         another_duplicate=register(first_image)
         f.invoke('bind-panel',panel='p1',bindings=f.json_file(
             {'appearance_versions':{'char-a':'base'},'reference_ids':[another_duplicate,second]}))
         with self.assertRaisesRegex(cp.GateError,'Three attempts exhausted'):
-            f.invoke('begin-panel',panel='p1',prompt=prompt)
+            f.begin_one(panel='p1',prompt=prompt)
 
     def test_reference_and_panel_qa_bind_exact_image_and_attempt(self):
         f=self.f;f.locked()
@@ -252,7 +252,7 @@ class VersionTwoTests(unittest.TestCase):
             f.invoke('register-reference',characters=['char-a'],file=reference_image,qa=f.json_file(report))
         f.reference()
         prompt=f.base/'prompt.txt';prompt.write_text('mechanical',encoding='utf-8')
-        attempt=f.invoke('begin-panel',panel='p1',prompt=prompt)
+        attempt=f.begin_one(panel='p1',prompt=prompt)
         image=f.image_file()
         report=cp.load_json(f.panel_qa('p1',attempt['attempt'],image))
         report['attempt_bindings']['p1']['attempt']+=1
@@ -263,10 +263,10 @@ class VersionTwoTests(unittest.TestCase):
         f=self.f;f.locked();f.reference()
         prompt=f.base/'prompt.txt';prompt.write_text('mechanical',encoding='utf-8')
         for number in (1,2):
-            attempt=f.invoke('begin-panel',panel='p1',prompt=prompt)
+            attempt=f.begin_one(panel='p1',prompt=prompt)
             self.assertEqual(number,attempt['attempt'])
             f.invoke('fail-panel',panel='p1',attempt=number,reason='mechanical closure',outcome='failed')
-        attempt=f.invoke('begin-panel',panel='p1',prompt=prompt)
+        attempt=f.begin_one(panel='p1',prompt=prompt)
         image=f.image_file()
         f.invoke('finish-panel',panel='p1',attempt=attempt['attempt'],file=image,
                  qa=f.panel_qa('p1',attempt['attempt'],image))
@@ -278,7 +278,7 @@ class VersionTwoTests(unittest.TestCase):
         self.assertEqual(1,status['preflight_counts']['panels_exhausted'])
         self.assertTrue(any('three attempts exhausted' in reason for reason in status['panel_blockers']['p1']))
         with self.assertRaisesRegex(cp.GateError,'Three attempts exhausted'):
-            f.invoke('begin-panel',panel='p1',prompt=prompt)
+            f.begin_one(panel='p1',prompt=prompt)
 
     def test_status_reports_malformed_script_art_source_and_style_fields(self):
         f=self.f;f.locked()
@@ -321,10 +321,10 @@ class VersionTwoTests(unittest.TestCase):
         f=self.f;f.locked();f.reference()
         prompt=f.base/'prompt.txt';prompt.write_text('mechanical',encoding='utf-8')
         for expected in (1,2,3):
-            result=f.invoke('begin-panel',panel='p1',prompt=prompt)
+            result=f.begin_one(panel='p1',prompt=prompt)
             self.assertEqual(expected,result['attempt'])
             f.invoke('fail-panel',panel='p1',attempt=expected,reason='Closed test attempt',outcome='cancelled')
-        with self.assertRaises(cp.GateError):f.invoke('begin-panel',panel='p1',prompt=prompt)
+        with self.assertRaises(cp.GateError):f.begin_one(panel='p1',prompt=prompt)
         self.assertIn('exhausted',' '.join(f.invoke('status')['panel_blockers']['p1']))
 
     def test_unequal_rows_keep_narrative_order_in_both_directions(self):
@@ -371,7 +371,7 @@ class VersionTwoTests(unittest.TestCase):
         self.assertEqual(subjects,cp.project_load(f.root)['art']['references'][-1]['subjects'])
         f.invoke('bind-panel',panel='p1',bindings=f.json_file({'appearance_versions':{'char-a':'base'},'reference_ids':[result['reference_id']]}))
         prompt=f.base/'prompt.txt';prompt.write_text('mechanical',encoding='utf-8')
-        attempt=f.invoke('begin-panel',panel='p1',prompt=prompt)
+        attempt=f.begin_one(panel='p1',prompt=prompt)
         with self.assertRaisesRegex(cp.GateError,'actual panel ID'):
             image=f.image_file()
             f.invoke('finish-panel',panel='p1',attempt=attempt['attempt'],file=image,
