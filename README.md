@@ -7,7 +7,7 @@ aiskyhub 的个人插件市场入口，维护 Codex 的 marketplace 元数据。
 | 插件 | 用途 | 源码 |
 |---|---|---|
 | `codex-with-cc` | 让 Codex 主线程负责任务拆解、派工、审核的工作流插件。 | `https://github.com/aiskyhub/codex_with_cc` |
-| `novel-to-comic` | 严格忠于小说原著文本（绝对禁止胡编乱造），通篇剧本先行与多轮自校验，按原生像素紧凑合图、逐格验收、排版和导出完整漫画。 | `https://github.com/aiskyhub/novel_to_comic` |
+| `novel-to-comic` | 将小说或长篇故事忠实改编为完整漫画的工作流插件。 | `https://github.com/aiskyhub/novel_to_comic` |
 
 ## 目录结构
 
@@ -31,12 +31,6 @@ aiskyhub/
 |---|---|---|---|
 | `codex-with-cc` | [aiskyhub/codex_with_cc](https://github.com/aiskyhub/codex_with_cc) | `$codex-with-cc` | 让主线程负责规划派工、审核闭环的工作流插件。 |
 | `novel-to-comic` | [aiskyhub/novel_to_comic](https://github.com/aiskyhub/novel_to_comic) | `$novel-to-comic 将我提供的小说忠实改编为完整漫画。` | 通用小说转完整漫画技能体系与流水线。 |
-
-### novel-to-comic 核心原则
-
-> ⚠️ **原著真实性铁律**：所有漫画剧情、分镜镜头、台词对白、角色动作，以及书名项目顶层 `README.md`、分卷 `README.md` 与 `docs/` 模块文档中的所有剧情描述，必须 100% 严格忠于已确认的小说原著文本，绝对禁止胡编乱造、凭空加戏或脑补臆测！
-
-详细的美术规范、批次规划、分卷制作流程与测试用例请参见独立仓库：[https://github.com/aiskyhub/novel_to_comic](https://github.com/aiskyhub/novel_to_comic)。
 
 ## Codex
 
