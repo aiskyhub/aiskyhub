@@ -15,6 +15,18 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Development"
+    },
+    {
+      "name": "novel-to-comic",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/aiskyhub/novel_to_comic"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Creative"
     }
   ]
 }
