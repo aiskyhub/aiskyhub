@@ -539,6 +539,72 @@ class PipelineTests(unittest.TestCase):
         full_md = (vol1_dir / 'full-script.md').read_text(encoding='utf-8')
         self.assertIn('# 神作小说 · 第1卷 · 通篇漫画剧本', full_md)
 
+    def test_init_book_and_split_source(self):
+        from argparse import Namespace
+        book_dir = self.base / '星辰变漫改'
+        raw_novel = self.base / '星辰变全书.txt'
+        raw_novel.write_text(
+            "第1卷 潜龙在渊\n第1章 异宝流星泪\n秦羽仰望星空。\n第2章 苦修\n少年挥汗如雨。\n"
+            "第2卷 暴乱星海\n第1章 初入凶域\n波涛汹涌，海怪盘踞。\n",
+            encoding='utf-8'
+        )
+
+        # 1. 运行 init-book，验证小说被移动到 source_texts，创建 split_texts、docs 及 README.md
+        init_res = cp.run(Namespace(
+            command='init-book',
+            book_dir=str(book_dir),
+            title='星辰变',
+            source=[str(raw_novel)],
+            action='move',
+            description='热血修真史诗'
+        ))
+        self.assertTrue(init_res['ok'])
+        self.assertEqual(init_res['title'], '星辰变')
+        self.assertFalse(raw_novel.exists(), "原小说文件应该已被移动")
+        archived_novel = book_dir / 'source_texts' / '星辰变全书.txt'
+        self.assertTrue(archived_novel.is_file(), "原稿应存在于 source_texts/")
+        self.assertTrue((book_dir / 'split_texts').is_dir(), "split_texts/ 目录应已创建")
+        self.assertTrue((book_dir / 'docs').is_dir(), "docs/ 目录应已创建")
+        for doc_name in ('overview.md', 'structure.md', 'worldview.md', 'characters.md', 'art_direction.md', 'progress.md'):
+            self.assertTrue((book_dir / 'docs' / doc_name).is_file(), f"docs/{doc_name} 应存在")
+
+        readme_text = (book_dir / 'README.md').read_text(encoding='utf-8')
+        self.assertIn("# 《星辰变》漫画项目", readme_text)
+        self.assertIn("docs/overview.md", readme_text)
+        self.assertIn("docs/structure.md", readme_text)
+        self.assertIn("source_texts/", readme_text)
+        self.assertIn("split_texts/", readme_text)
+
+        # 2. 运行 split-source，验证切分结果统一存入 split_texts/
+        split_res = cp.run(Namespace(
+            command='split-source',
+            book_dir=str(book_dir),
+            file='星辰变全书.txt',
+            output_dir=None,
+            pattern=None
+        ))
+        self.assertTrue(split_res['ok'])
+        self.assertEqual(split_res['segments_count'], 2)
+        vol1_file = book_dir / 'split_texts' / '第1卷 潜龙在渊.txt'
+        vol2_file = book_dir / 'split_texts' / '第2卷 暴乱星海.txt'
+        self.assertTrue(vol1_file.is_file())
+        self.assertTrue(vol2_file.is_file())
+        self.assertIn("秦羽仰望星空", vol1_file.read_text(encoding='utf-8'))
+        self.assertIn("海怪盘踞", vol2_file.read_text(encoding='utf-8'))
+
+        # 3. 验证以第1卷切割文本初始化该卷独立制作工作区
+        vol1_project = book_dir / '第1卷'
+        vol1_init = cp.run(Namespace(
+            command='init',
+            project=str(vol1_project),
+            source=[str(vol1_file)],
+            title='星辰变',
+            volume='第1卷'
+        ))
+        self.assertEqual(vol1_init['title'], '星辰变')
+        self.assertEqual(vol1_init['volume'], '第1卷')
+        self.assertTrue((vol1_project / 'project.json').is_file())
+
 
 if __name__ == '__main__':
     unittest.main()

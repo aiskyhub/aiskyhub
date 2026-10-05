@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import uuid
@@ -27,6 +28,8 @@ PANEL_CHECKS = ['identity', 'continuity', 'composition', 'drawing_quality', 'no_
 REFERENCE_CHECKS = ['identity', 'distinctiveness', 'angles_and_expressions', 'source_faithfulness',
                     'gender_readability', 'body_design', 'design_tier_fit', 'visual_elegance']
 LAYOUT_CHECKS = ['text_accuracy', 'reading_order', 'speaker_assignment', 'face_visibility', 'visual_elegance']
+VOLUME_HEADING = re.compile(r'^(?:第[0-9零〇一二三四五六七八九十百千万两壹贰叁肆伍陆柒捌玖拾佰\s]+[卷部篇集].*'
+                            r'|(?:book|volume|part)\s+[\wIVXLC0-9]+.*)$', re.I)
 
 
 class GateError(ValueError):
@@ -1385,9 +1388,282 @@ def qa_inputs(root, project, args):
             'subjects': subjects, 'reviewed_ids': ids}
 
 
+def init_book(book_dir, title=None, sources=None, action='move', description=''):
+    """Initialize top-level book project directory, archive novel text, create docs folder, and generate README.md."""
+    book_path = Path(book_dir).resolve()
+    book_title = title or book_path.name
+    book_path.mkdir(parents=True, exist_ok=True)
+
+    source_texts_dir = book_path / 'source_texts'
+    source_texts_dir.mkdir(parents=True, exist_ok=True)
+
+    split_texts_dir = book_path / 'split_texts'
+    split_texts_dir.mkdir(parents=True, exist_ok=True)
+
+    docs_dir = book_path / 'docs'
+    docs_dir.mkdir(parents=True, exist_ok=True)
+
+    archived_sources = []
+    if sources:
+        for src in sources:
+            src_file = Path(src).resolve()
+            if not src_file.is_file():
+                raise GateError(f'Source novel file not found: {src_file}')
+            dest = source_texts_dir / src_file.name
+            if action == 'move':
+                if src_file != dest:
+                    shutil.move(str(src_file), str(dest))
+            else:
+                if src_file != dest:
+                    shutil.copy2(str(src_file), str(dest))
+            archived_sources.append(dest.name)
+
+    doc_modules = {
+        'overview.md': (
+            f"# 《{book_title}》漫画项目概述\n\n"
+            "## 1. 作品基本信息\n\n"
+            f"- **书名**：{book_title}\n"
+            f"- **简介**：{description or '（待补充作品简介）'}\n"
+            "- **改编方向**：忠实于原作故事主线、人物弧光与世界观设定，精致优雅漫改。\n\n"
+            "## 2. 全书分卷与篇幅规划\n\n"
+            "| 卷别 | 对应原文范围 | 制作状态 | 制作目录 |\n"
+            "|---|---|---|---|\n"
+            f"| 第1卷 | 待规划章节范围 | 待启动 | `第1卷/` |\n\n"
+            "## 3. 核心受众与题材定位\n\n"
+            "- 题材分类：\n"
+            "- 核心情绪与叙事节奏：\n"
+        ),
+        'structure.md': (
+            f"# 《{book_title}》项目工程与目录结构规范\n\n"
+            "## 1. 项目整体架构\n\n"
+            "本项目顶层以书名命名，采用分卷独立工程与集中资料管理的架构：\n\n"
+            "```text\n"
+            f"{book_path.name}/\n"
+            "├── README.md                   # 顶层说明与各模块导航入口\n"
+            "├── docs/                       # 项目介绍与设计规范模块文档\n"
+            "│   ├── overview.md             # 作品概述与分卷规划\n"
+            "│   ├── structure.md            # 项目结构说明（本文档）\n"
+            "│   ├── worldview.md            # 全书世界观与核心设定\n"
+            "│   ├── characters.md           # 跨卷核心角色档案与视觉基准\n"
+            "│   ├── art_direction.md        # 全书统一美术规范\n"
+            "│   └── progress.md             # 制作进度与各卷状态跟踪\n"
+            "├── source_texts/               # 原始小说文本文档归档目录\n"
+            "├── split_texts/                # 文本切割统一存放目录（按卷/部拆分）\n"
+            "└── 第1卷/                      # 第1卷漫画制作独立工程（--project 目标）\n"
+            "    ├── project.json            # 制作状态与索引\n"
+            "    ├── full-script.md          # 锁定的通篇分镜剧本\n"
+            "    ├── source/                 # 提取的章节与原稿副本\n"
+            "    ├── scripts/                # 工作剧本与修订稿\n"
+            "    ├── design/                 # 卷内角色、场景及美术档案\n"
+            "    ├── art/                    # 参考图、画格、批次原图与裁切\n"
+            "    ├── prompts/                # 实际生成提示词\n"
+            "    ├── reports/                # 各阶段审查质检报告\n"
+            "    ├── pages/                  # 排版完成页面 PNG\n"
+            "    └── exports/                # 离线阅读器、PDF、CBZ 成品\n"
+            "```\n\n"
+            "## 2. 制作工作流\n\n"
+            "1. 原始小说放入 `source_texts/`；\n"
+            "2. 如需按卷拆分，拆分文本存放于 `split_texts/`；\n"
+            "3. 各卷以子文件夹（如 `第1卷/`）作为 `--project` 执行 pipeline 流程；\n"
+            "4. 跨卷资产复用：后续卷可复用前卷已通过的人物设定与参考图基准。\n"
+        ),
+        'worldview.md': (
+            f"# 《{book_title}》世界观与核心设定\n\n"
+            "## 1. 时代背景与地理空间\n\n"
+            "- 背景描述：\n"
+            "- 主要势力与地理区域：\n\n"
+            "## 2. 核心法则与特殊设定\n\n"
+            "- 世界运作法则/能力体系：\n"
+            "- 视觉呈现约束（避免画面违和）：\n\n"
+            "## 3. 专有名词与术语表\n\n"
+            "| 专有名词 | 含义与原文依据 | 视觉/排版对应说明 |\n"
+            "|---|---|---|\n"
+            "| （示例术语） | 原作定义 | 对应视觉符号或设计注记 |\n"
+        ),
+        'characters.md': (
+            f"# 《{book_title}》核心角色档案与视觉基准（跨卷）\n\n"
+            "本文件记录全书各卷共享的全局核心人物设定，保持多卷制作期间人物形象、气质与辨识度稳定一致。\n\n"
+            "## 1. 人物设计总原则\n\n"
+            "- **男女造型清晰**：女性角色保持明确女性造型特征；男性角色保持明确男性骨相体格；不因英气或职业而模糊性别外观。\n"
+            "- **设计层级**：男女主角为 lead，核心配角为 core，路人为 background；主角精雕五官轮廓与体态。\n"
+            "- **跨卷复用**：后续卷制作时，直接引用前卷已通过的基准图与设定档案（`art/references/` 与 `design/`）。\n\n"
+            "## 2. 核心人物列表\n\n"
+            "### 主角（Lead）\n\n"
+            "- **姓名/ID**：\n"
+            "- **外观特征**：脸型、眉眼、鼻唇、发型、体态比例。\n"
+            "- **基准参考图路径**：\n\n"
+            "### 核心配角（Core）\n\n"
+            "- **姓名/ID**：\n"
+            "- **外观特征与区别点**：与主角的五官轮廓、体态差异点。\n"
+        ),
+        'art_direction.md': (
+            f"# 《{book_title}》全书美术规范与视觉基准\n\n"
+            "## 1. 统一主画风\n\n"
+            "- **风格定位**：精致优雅、细致清晰线条、清透协调配色。\n"
+            "- **线条规范**：轮廓线干净稳定，内线轻盈，避免多余粗糙线头与非叙事杂乱排线。\n"
+            "- **上色与明暗**：克制清透的主要明暗层次，暗面色相干净，保留表情和关键动作可读性；避免全图脏黄滤镜。\n"
+            "- **背景与空间**：形块清晰交代空间关系，有组织留白；人物对白与重要冲突时适度概括，减少杂物堆砌。\n\n"
+            "## 2. 版式与画格节奏\n\n"
+            "- **默认格式**：固定页漫 / 条漫\n"
+            "- **画布尺寸**：1536 x 2176（或按项目指定）\n"
+            "- **构图动线**：每格具备清晰视觉中心；重点情节采用整宽画格，过渡情节采用双格行组合。\n"
+        ),
+        'progress.md': (
+            f"# 《{book_title}》制作进度与分卷追踪\n\n"
+            "## 各卷实施看板\n\n"
+            "| 卷别 | 剧本锁定 | 角色基准 | 画格生成 | 页面排版 | 导出交付 | 总体状态 |\n"
+            "|---|---|---|---|---|---|---|\n"
+            "| 第1卷 | ⚪ 未开始 | ⚪ 未开始 | ⚪ 未开始 | ⚪ 未开始 | ⚪ 未开始 | 待启动 |\n\n"
+            "## 近期工作记录\n\n"
+            f"- [{datetime.now().strftime('%Y-%m-%d')}] 初始化《{book_title}》书名项目与文档体系脚手架。\n"
+        ),
+    }
+
+    created_docs = []
+    for doc_name, doc_content in doc_modules.items():
+        doc_file = docs_dir / doc_name
+        if not doc_file.exists():
+            doc_file.write_text(doc_content, encoding='utf-8')
+            created_docs.append(f"docs/{doc_name}")
+
+    readme_file = book_path / 'README.md'
+    readme_content = (
+        f"# 《{book_title}》漫画项目\n\n"
+        f"> 本项目为《{book_title}》小说改编完整漫画工程。项目顶层以书名为名称，分卷作为子文件夹进行独立制作与管理。\n\n"
+        "## 📁 项目目录结构\n\n"
+        "```text\n"
+        f"{book_path.name}/\n"
+        "├── README.md                   # 本文件（项目总览与模块导航）\n"
+        "├── docs/                       # 漫画项目介绍与设计规范模块（随项目持续完善）\n"
+        "│   ├── overview.md             # 作品概述、分卷规划与核心故事梗概\n"
+        "│   ├── structure.md            # 项目目录结构与工程布局详细说明\n"
+        "│   ├── worldview.md            # 全书世界观、核心背景与跨卷通用设定\n"
+        "│   ├── characters.md           # 跨卷核心角色档案与视觉基准指南\n"
+        "│   ├── art_direction.md        # 全书统一美术规范（线条、上色、光影、版式）\n"
+        "│   └── progress.md             # 制作进度与各卷实施状态看板\n"
+        "├── source_texts/               # 原始小说文本文档归档目录（原始原稿移动至此）\n"
+        "├── split_texts/                # 文本切割统一存放目录（按卷/部拆分文本）\n"
+        "└── 第1卷/                      # 第 1 卷独立漫画制作工程（--project 目标）\n"
+        "    ├── project.json            # 制作状态、哈希与索引\n"
+        "    ├── full-script.md          # 通篇锁定剧本\n"
+        "    ├── source/                 # 提取的章节与原稿副本\n"
+        "    ├── design/                 # 角色与场景档案\n"
+        "    ├── art/                    # 参考图、画格、批次图与裁切\n"
+        "    ├── reports/                # 质检审查报告\n"
+        "    ├── pages/                  # 排版页面 PNG\n"
+        "    └── exports/                # 阅读器、PDF、CBZ 成品\n"
+        "```\n\n"
+        "## 📚 内容模块文档导航\n\n"
+        "本项目将各维度的介绍与规范划分到 `docs/` 目录中，支持随制作深入持续扩充和完善：\n\n"
+        "1. [作品概述与分卷规划](docs/overview.md)：作品基本信息、全书分卷与篇幅规划。\n"
+        "2. [工程目录结构说明](docs/structure.md)：项目结构规范、子目录职责与工作流指南。\n"
+        "3. [世界观与核心设定](docs/worldview.md)：时代背景、法则机制与术语表。\n"
+        "4. [核心角色档案与视觉基准](docs/characters.md)：跨卷核心人物形象、男女外观、设计层级与基准对照。\n"
+        "5. [美术规范与视觉基准](docs/art_direction.md)：线条、配色、光影、背景留白及排版规则。\n"
+        "6. [制作进度与分卷追踪](docs/progress.md)：全书分卷进度看板与演进日志。\n\n"
+        "## 🚀 分卷制作快速指引\n\n"
+        "1. **文本准备**：原稿已归档于 `source_texts/`。如需分卷，将切割后的各卷文本存入 `split_texts/`。\n"
+        "2. **初始化分卷工程**：\n"
+        "   ```powershell\n"
+        f"   & $comicPython -X utf8 $comicCli init --project '作品绝对路径/{book_path.name}/第1卷' --source '作品绝对路径/{book_path.name}/split_texts/第1卷.txt' --title '{book_title}' --volume '第1卷'\n"
+        "   ```\n"
+        "3. **推进分卷制作**：进入对应卷目录，按通篇剧本 → 校验锁定 → 角色基准 → 多格生成 → 排版 → 验收交付执行。\n"
+    )
+    readme_file.write_text(readme_content, encoding='utf-8')
+
+    return {
+        'ok': True,
+        'book_dir': str(book_path),
+        'title': book_title,
+        'source_texts': [str(source_texts_dir / name) for name in archived_sources],
+        'split_texts_dir': str(split_texts_dir),
+        'docs_dir': str(docs_dir),
+        'created_docs': created_docs,
+        'readme': str(readme_file),
+    }
+
+
+def split_source(book_dir, file_path, output_dir=None, pattern=None):
+    """Split source novel text into segments (e.g. by volumes or headings) and store in split_texts directory."""
+    book_path = Path(book_dir).resolve()
+    target_file = Path(file_path).resolve()
+    if not target_file.is_file():
+        candidate = book_path / 'source_texts' / file_path
+        if candidate.is_file():
+            target_file = candidate
+        else:
+            raise GateError(f'Source file not found: {file_path}')
+
+    out_dir = Path(output_dir).resolve() if output_dir else book_path / 'split_texts'
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    from comic_sources import decode_text
+    raw_bytes = target_file.read_bytes()
+    text, _ = decode_text(raw_bytes)
+    lines = text.splitlines()
+
+    regex = re.compile(pattern) if pattern else VOLUME_HEADING
+
+    segments = []
+    current_title = None
+    current_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped and regex.match(stripped):
+            if current_lines:
+                segments.append((current_title or '前置文本', current_lines))
+            current_title = stripped
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        segments.append((current_title or '正文', current_lines))
+
+    created_files = []
+    if len(segments) > 1 or (len(segments) == 1 and segments[0][0] != '正文'):
+        for index, (seg_title, seg_lines) in enumerate(segments, 1):
+            safe_name = re.sub(r'[\\/*?:"<>|]', '_', seg_title).strip()
+            if not safe_name:
+                safe_name = f'第{index}部分'
+            file_name = f'{safe_name}.txt'
+            dest = out_dir / file_name
+            dest.write_text('\n'.join(seg_lines) + '\n', encoding='utf-8')
+            created_files.append({
+                'title': seg_title,
+                'path': str(dest),
+                'lines': len(seg_lines),
+                'chars': sum(len(l) for l in seg_lines)
+            })
+    else:
+        dest = out_dir / '第1卷.txt'
+        dest.write_text(text, encoding='utf-8')
+        created_files.append({
+            'title': '第1卷（全书）',
+            'path': str(dest),
+            'lines': len(lines),
+            'chars': len(text)
+        })
+
+    return {
+        'ok': True,
+        'source_file': str(target_file),
+        'output_dir': str(out_dir),
+        'segments_count': len(created_files),
+        'files': created_files
+    }
+
+
 def run(args):
-    root = Path(args.project).resolve()
     command = args.command
+    if command == 'init-book':
+        return init_book(args.book_dir, title=args.title, sources=args.source,
+                         action=args.action, description=args.description)
+    if command == 'split-source':
+        return split_source(args.book_dir, args.file, output_dir=args.output_dir,
+                            pattern=args.pattern)
+    root = Path(args.project).resolve()
     if command == 'init':
         if root.exists() and any(root.iterdir()):
             raise GateError('Project directory must be new/empty; use status for existing projects.')
@@ -1855,6 +2131,22 @@ def run(args):
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     subs = p.add_subparsers(dest='command', required=True)
+    book_p = subs.add_parser('init-book')
+    book_p.add_argument('--book-dir', '--project', dest='book_dir', required=True,
+                        help='Path to top-level book directory')
+    book_p.add_argument('--title', help='Book title')
+    book_p.add_argument('--source', nargs='*', help='One or more source novel files to archive into source_texts/')
+    book_p.add_argument('--action', choices=['move', 'copy'], default='move',
+                        help='Action for source novel files: move or copy')
+    book_p.add_argument('--description', default='', help='Brief book description')
+
+    split_p = subs.add_parser('split-source')
+    split_p.add_argument('--book-dir', '--project', dest='book_dir', required=True,
+                         help='Path to top-level book directory')
+    split_p.add_argument('--file', required=True, help='Source file name or path to split')
+    split_p.add_argument('--output-dir', help='Output directory for split files (default: book_dir/split_texts)')
+    split_p.add_argument('--pattern', help='Custom regex pattern for volume or segment headings')
+
     for name in ('init', 'preflight', 'qa-inputs', 'chapter', 'script-chapter', 'resolve-issue', 'confirm-source',
                  'mark-read', 'set-script', 'set-script-chapter', 'impact', 'check-script', 'review',
                  'lock-script', 'assert-art', 'register-reference', 'bind-panel',

@@ -1,6 +1,6 @@
 # 项目与数据契约（版本 3）
 
-`project.json` 由 helper 创建和更新，包含 schema_version（4）、title（书名）、volume（卷名，如“第1卷”）、source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前卷状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目分卷布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。仅支持 schema_version=4；其他版本明确拒绝，不提供迁移，也不修改已有旧项目或补历史通过结论。
+`project.json` 由 helper 创建和更新，位于各分卷制作子目录中，包含 schema_version（4）、title（书名）、volume（卷名，如“第1卷”）、source、script、reviews、script_lock、art、layout、exports、final_review。书名顶层目录维护全书 `README.md`、`docs/` 模块化介绍文档、集中归档的 `source_texts/` 与切分后的 `split_texts/`。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前卷状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目分卷布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。仅支持 schema_version=4；其他版本明确拒绝，不提供迁移，也不修改已有旧项目或补历史通过结论。
 
 ## Source
 
