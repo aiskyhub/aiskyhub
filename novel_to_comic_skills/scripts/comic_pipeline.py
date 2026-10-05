@@ -1530,44 +1530,80 @@ def init_book(book_dir, title=None, sources=None, action='move', description='')
     readme_content = (
         f"# 《{book_title}》漫画项目\n\n"
         f"> 本项目为《{book_title}》小说改编完整漫画工程。项目顶层以书名为名称，分卷作为子文件夹进行独立制作与管理。\n\n"
+        "## 📖 全书分卷制作总览看板\n\n"
+        "| 卷别 | 对应原文范围 | 制作工程目录 | 核心剧情看点 | 制作状态 | 交付成果 |\n"
+        "|---|---|---|---|---|---|\n"
+        f"| **第1卷** | 待规划章节范围 | [第1卷/README.md](第1卷/README.md) | 待概括本卷核心剧情 | 待启动 | [查看阅读器/PDF](第1卷/exports/) |\n"
+        f"| **第2卷** | 后续章节范围 | [第2卷/README.md](第2卷/README.md) | 待启动后续剧情 | 未立项 | - |\n\n"
+        "> 💡 **提示**：每卷制作启动后，各卷的重要信息（章节数、剧本锁、资产账本、画格生成进度等）将详细记录在各自的 `[第X卷/README.md]` 中，完成时请同步更新上方看板。\n\n"
+        "## 🧭 怎么做：漫改全流程标准作业程序 (SOP)\n\n"
+        "本漫改项目严格遵循以下不可跳过的制作顺序：\n\n"
+        "1. **原文归档与按卷切分**：\n"
+        "   - 原始小说文件统一存入 `source_texts/` 目录；\n"
+        "   - 若篇幅较长，使用 `split-source` 或手动按卷拆分小说，将切分文本存入 `split_texts/`（如 `第1卷.txt`）。\n"
+        "2. **研读规范与世界观设定**：\n"
+        "   - 阅读 `docs/worldview.md`、`docs/characters.md` 和 `docs/art_direction.md`，确立全书统一的世界观规则、男女造型特征、核心角色层级与美术规范。\n"
+        "3. **分卷立项与工程初始化**：\n"
+        "   - 使用 `init` 命令初始化该卷制作子目录（如 `第1卷/`），自动生成该卷的 `project.json` 与本卷 `README.md`。\n"
+        "4. **通篇详细分镜剧本先行与三轮自校验**：\n"
+        "   - 读完全部正文，编制全卷详细可绘制剧本，执行 `set-script` 导入；\n"
+        "   - 逐轮完成 coverage（事件覆盖）、continuity（因果连贯）、comic（镜头与排版）三轮审查并生成报告；\n"
+        "   - 通过 `lock-script` 锁定剧本并输出 `full-script.md`。**严禁在剧本锁定前出图！**\n"
+        "5. **角色与场景视觉基准登记**：\n"
+        "   - 通过 `assert-art` 关卡放行；建立男女主角多角度、全身与表情设定板；\n"
+        "   - 主代理看图验收合格后，通过 `register-reference` 登记基准图。续卷可直接复用前卷已通过的基准图。\n"
+        "6. **自适应多格生成与逐格验收**：\n"
+        "   - 按原生像素与展示尺寸紧凑合图，使用 `begin-batch` 登记批次 -> 绘图 -> `split-batch` 无损分格；\n"
+        "   - 主代理亲自看图，执行 `qa-inputs` 校验与 `finish-panel` 逐格验收。\n"
+        "7. **文字排版与页面合成**：\n"
+        "   - 使用 `compose` 进行全卷图文排版，生成整页 PNG；\n"
+        "   - 实际审阅所有页面后执行 `review-layout` 记录质检结论。\n"
+        "8. **多格式导出与最终验收交付**：\n"
+        "   - 执行 `export` 导出离线 HTML 阅读器、PDF 与 CBZ；\n"
+        "   - 渲染验证后执行 `complete` 记录交付，并更新本卷 `README.md` 与顶层总览看板。\n\n"
+        "## 📚 各种规范引导文件在哪（文档导航）\n\n"
+        "本项目将各维度的介绍与规范划分存放在 `docs/` 文件夹中，各模块职责与查阅时机如下：\n\n"
+        "| 规范引导文件 | 核心职责与内容 | 查阅与维护时机 |\n"
+        "|---|---|---|\n"
+        "| [docs/overview.md](docs/overview.md) | 作品基本信息、全书分卷规划、核心简介与题材定位 | 项目立项、分卷规划或向读者介绍全书时查阅 |\n"
+        "| [docs/structure.md](docs/structure.md) | 工程目录结构规范、各文件夹职责与文件流转规则 | 了解项目布局、维护工作流或排查文件路径时查阅 |\n"
+        "| [docs/worldview.md](docs/worldview.md) | 时代背景、地理势力、核心法则/能力体系与术语表 | 编剧分镜、场景空间设计与对白术语校验时查阅 |\n"
+        "| [docs/characters.md](docs/characters.md) | 跨卷核心角色档案、男女外观标准、设计层级与基准对照指南 | 角色人设、设定板制作、基准图登记与防撞脸核查时查阅 |\n"
+        "| [docs/art_direction.md](docs/art_direction.md) | 全书主美术方向（线条、配色、光影、背景留白、版式动线） | 风格确立、批次提示词撰写与整页视觉审美质检时查阅 |\n"
+        "| [docs/progress.md](docs/progress.md) | 全书制作进度看板、各卷实施里程碑与演进日志 | 制作推进、节点验收与换会话恢复进度时更新查阅 |\n\n"
         "## 📁 项目目录结构\n\n"
         "```text\n"
         f"{book_path.name}/\n"
-        "├── README.md                   # 本文件（项目总览与模块导航）\n"
+        "├── README.md                   # 本文件（项目总览、各卷看板、制作SOP与规范导航）\n"
         "├── docs/                       # 漫画项目介绍与设计规范模块（随项目持续完善）\n"
-        "│   ├── overview.md             # 作品概述、分卷规划与核心故事梗概\n"
-        "│   ├── structure.md            # 项目目录结构与工程布局详细说明\n"
+        "│   ├── overview.md             # 作品概述与全书分卷规划\n"
+        "│   ├── structure.md            # 项目工程与目录结构规范说明\n"
         "│   ├── worldview.md            # 全书世界观、核心背景与跨卷通用设定\n"
         "│   ├── characters.md           # 跨卷核心角色档案与视觉基准指南\n"
         "│   ├── art_direction.md        # 全书统一美术规范（线条、上色、光影、版式）\n"
-        "│   └── progress.md             # 制作进度与各卷实施状态看板\n"
+        "│   └── progress.md             # 全书制作进度与分卷实施看板\n"
         "├── source_texts/               # 原始小说文本文档归档目录（原始原稿移动至此）\n"
         "├── split_texts/                # 文本切割统一存放目录（按卷/部拆分文本）\n"
         "└── 第1卷/                      # 第 1 卷独立漫画制作工程（--project 目标）\n"
-        "    ├── project.json            # 制作状态、哈希与索引\n"
-        "    ├── full-script.md          # 通篇锁定剧本\n"
-        "    ├── source/                 # 提取的章节与原稿副本\n"
-        "    ├── design/                 # 角色与场景档案\n"
-        "    ├── art/                    # 参考图、画格、批次图与裁切\n"
-        "    ├── reports/                # 质检审查报告\n"
-        "    ├── pages/                  # 排版页面 PNG\n"
-        "    └── exports/                # 阅读器、PDF、CBZ 成品\n"
+        "    ├── README.md               # 本卷重要信息记录、状态看板与命令速查\n"
+        "    ├── project.json            # 本卷制作状态、哈希与索引\n"
+        "    ├── full-script.md          # 本卷通篇锁定的分镜剧本\n"
+        "    ├── source/                 # 本卷提取的章节与原稿副本\n"
+        "    ├── design/                 # 本卷角色与场景档案\n"
+        "    ├── art/                    # 本卷参考图、画格、批次图与裁切\n"
+        "    ├── reports/                # 本卷质检审查报告\n"
+        "    ├── pages/                  # 本卷排版页面 PNG\n"
+        "    └── exports/                # 本卷阅读器、PDF、CBZ 成品\n"
         "```\n\n"
-        "## 📚 内容模块文档导航\n\n"
-        "本项目将各维度的介绍与规范划分到 `docs/` 目录中，支持随制作深入持续扩充和完善：\n\n"
-        "1. [作品概述与分卷规划](docs/overview.md)：作品基本信息、全书分卷与篇幅规划。\n"
-        "2. [工程目录结构说明](docs/structure.md)：项目结构规范、子目录职责与工作流指南。\n"
-        "3. [世界观与核心设定](docs/worldview.md)：时代背景、法则机制与术语表。\n"
-        "4. [核心角色档案与视觉基准](docs/characters.md)：跨卷核心人物形象、男女外观、设计层级与基准对照。\n"
-        "5. [美术规范与视觉基准](docs/art_direction.md)：线条、配色、光影、背景留白及排版规则。\n"
-        "6. [制作进度与分卷追踪](docs/progress.md)：全书分卷进度看板与演进日志。\n\n"
-        "## 🚀 分卷制作快速指引\n\n"
-        "1. **文本准备**：原稿已归档于 `source_texts/`。如需分卷，将切割后的各卷文本存入 `split_texts/`。\n"
-        "2. **初始化分卷工程**：\n"
-        "   ```powershell\n"
-        f"   & $comicPython -X utf8 $comicCli init --project '作品绝对路径/{book_path.name}/第1卷' --source '作品绝对路径/{book_path.name}/split_texts/第1卷.txt' --title '{book_title}' --volume '第1卷'\n"
-        "   ```\n"
-        "3. **推进分卷制作**：进入对应卷目录，按通篇剧本 → 校验锁定 → 角色基准 → 多格生成 → 排版 → 验收交付执行。\n"
+        "## 🚀 常用操作命令速查\n\n"
+        "```powershell\n"
+        "# 1. 拆分原稿到 split_texts/\n"
+        f"& $python -X utf8 $cli split-source --book-dir '{book_path}' --file 'source_texts/原稿.txt'\n\n"
+        "# 2. 初始化第 1 卷工程（自动生成第1卷/README.md）\n"
+        f"& $python -X utf8 $cli init --project '{book_path}/第1卷' --source '{book_path}/split_texts/第1卷.txt' --title '{book_title}' --volume '第1卷'\n\n"
+        "# 3. 查看第 1 卷制作状态\n"
+        f"& $python -X utf8 $cli status --project '{book_path}/第1卷'\n"
+        "```\n"
     )
     readme_file.write_text(readme_content, encoding='utf-8')
 
@@ -1655,6 +1691,140 @@ def split_source(book_dir, file_path, output_dir=None, pattern=None):
     }
 
 
+def write_volume_readme(root, project):
+    """Write or update volume-level README.md recording important information for this volume."""
+    root = Path(root).resolve()
+    title = project.get('title') or root.parent.name
+    volume = project.get('volume') or root.name
+    source = project.get('source', {}) if isinstance(project.get('source'), dict) else {}
+    chapters = source.get('chapters', []) if isinstance(source.get('chapters'), list) else []
+    units = source.get('units', []) if isinstance(source.get('units'), list) else []
+    script = project.get('script', {}) if isinstance(project.get('script'), dict) else {}
+    panels = script.get('panels', []) if isinstance(script.get('panels'), list) else []
+    pages = script.get('pages', []) if isinstance(script.get('pages'), list) else []
+    art = project.get('art', {}) if isinstance(project.get('art'), dict) else {}
+    ref_list = art.get('references', []) if isinstance(art.get('references'), list) else []
+    panel_dict = art.get('panels', {}) if isinstance(art.get('panels'), dict) else {}
+    accepted_panels = sum(1 for p in panels if isinstance(p, dict) and p.get('id') in panel_dict)
+    script_lock = project.get('script_lock')
+    locked = bool(script_lock)
+    exports = project.get('exports')
+
+    source_files = [f.get('path', '') for f in source.get('files', []) if isinstance(f, dict)]
+    source_summary = ', '.join(Path(p).name for p in source_files if p) or '已归档原文'
+
+    readme_path = root / 'README.md'
+    lines = [
+        f"# 《{title}》· {volume or '分卷'} 漫画制作工程",
+        "",
+        f"> 本文档为《{title}》{volume or '本卷'}的制作工作区说明，记录本卷的基本信息、当前关卡状态、目录职责、常用命令与交付资产。",
+        "",
+        "## 📌 本卷基本信息",
+        "",
+        f"- **所属作品**：{title}",
+        f"- **分卷名称**：{volume or '默认卷'}",
+        f"- **原文来源**：`{source_summary}`",
+        f"- **章节数量**：共 {len(chapters)} 章（{sum(bool(c.get('has_body')) for c in chapters)} 章含正文）",
+        f"- **有效原文段落**：共 {len(units)} 个提取单元",
+        f"- **本卷叙事焦点**：{script.get('outline') or '（通篇剧本编制中，待概要提炼）'}",
+        "",
+        "## 📊 制作状态看板",
+        "",
+        "| 制作阶段 | 当前状态 | 关键指标 / 记录 |",
+        "|---|---|---|",
+        f"| **原文提取与确认** | {'✅ 已确认' if source.get('confirmed') else '⏳ 待确认 (confirm-source)'} | 提取问题数: {len(source.get('issues', []))} |",
+        f"| **章节实际阅读** | {sum(bool(c.get('read')) for c in chapters)}/{len(chapters)} 章已读 | 笔记已存入 source.chapters |",
+        f"| **通篇分镜剧本** | {'🔒 已锁定 (full-script.md)' if locked else '📝 编制/校验中'} | 指纹: `{script_lock.get('script_hash')[:12] if locked else digest(script)[:12]}` |",
+        f"| **角色/场景基准** | 已登记 {len(ref_list)} 项基准参考 | 关联 design/ 与 art/references/ |",
+        f"| **画面资产生成** | {accepted_panels}/{len(panels)} 格通过 | 计划画格: {len(panels)} 格 |",
+        f"| **页面合成排版** | {'✅ 已排版' if project.get('layout') else '⏳ 待排版 (compose)'} | 规划页数: {len(pages)} 页 |",
+        f"| **成品导出交付** | {'📦 已导出' if exports else '⏳ 待导出 (export)'} | HTML阅读器 / PDF / CBZ |",
+        "",
+        "## 📁 本卷工程目录结构",
+        "",
+        "```text",
+        f"{root.name}/",
+        "├── README.md                 # 本文件（本卷信息总览、状态看板与命令速查）",
+        "├── project.json              # 当前卷制作状态、版本哈希、尝试账本与索引",
+        "├── full-script.md            # 通篇锁定的详细分镜剧本（锁定后自动生成）",
+        "├── source/                   # 提取的章节正文；originals/ 保存原稿副本",
+        "├── scripts/                  # 工作剧本、修订稿与项目专用辅助代码",
+        "├── design/                   # 本卷角色、场景、道具及美术档案",
+        "├── art/                      # 画面资产目录",
+        "│   ├── references/           # 已登记参考基准图（register-reference 保存）",
+        "│   ├── panels/               # 已验收画格 PNG（finish-panel 保存）",
+        "│   ├── raw/                  # 批次生成原图与编辑尝试",
+        "│   └── crops/                # 无损裁切画格（待逐格验收）",
+        "├── prompts/                  # 实际批次提示词文件",
+        "├── reports/                  # 剧本审查报告、参考图 QA 与画格视觉质检报告",
+        "├── pages/                    # 排版合成完成的页面 PNG",
+        "├── exports/                  # 离线阅读器、PDF、CBZ 导出品",
+        "└── versions/                 # 原文重提取等需要独立状态的内部版本",
+        "```",
+        "",
+        "## 🛠️ 本卷常用操作命令速查",
+        "",
+        "请在终端中指定当前卷路径为 `--project` 执行流水线命令：",
+        "",
+        "```powershell",
+        "# 1. 查看当前卷制作进度与阻塞项",
+        f"& $python -X utf8 $cli status --project '{root}'",
+        "",
+        "# 2. 标记阅读正文与确认来源",
+        f"& $python -X utf8 $cli mark-read --project '{root}' --chapter ch000001 --note '已读完本章核心剧情'",
+        f"& $python -X utf8 $cli confirm-source --project '{root}' --note '已确认全文无缺漏漏读'",
+        "",
+        "# 3. 导入工作剧本与结构检查",
+        f"& $python -X utf8 $cli set-script --project '{root}' --file 'scripts/work-script.json'",
+        f"& $python -X utf8 $cli check-script --project '{root}'",
+        "",
+        "# 4. 提交三轮审查并锁定剧本",
+        f"& $python -X utf8 $cli review --project '{root}' --kind coverage --file 'reports/coverage.json'",
+        f"& $python -X utf8 $cli review --project '{root}' --kind continuity --file 'reports/continuity.json'",
+        f"& $python -X utf8 $cli review --project '{root}' --kind comic --file 'reports/comic.json'",
+        f"& $python -X utf8 $cli lock-script --project '{root}'",
+        "",
+        "# 5. 登记角色基准参考图（出图前必须先过关卡）",
+        f"& $python -X utf8 $cli assert-art --project '{root}'",
+        f"& $python -X utf8 $cli register-reference --project '{root}' --file 'art/raw/ref.png' --qa 'reports/ref.json' --characters char-01",
+        "",
+        "# 6. 批次多格生成、裁切与逐格验收",
+        f"& $python -X utf8 $cli begin-batch --project '{root}' --plan 'prompts/plan.json' --prompt 'prompts/batch.txt'",
+        f"& $python -X utf8 $cli split-batch --project '{root}' --batch batch-01 --file 'art/raw/batch.png' --regions 'prompts/regions.json'",
+        f"& $python -X utf8 $cli qa-inputs --project '{root}' --panel p001 --attempt 1 --file 'art/crops/batch-01/p001.png'",
+        f"& $python -X utf8 $cli finish-panel --project '{root}' --panel p001 --attempt 1 --file 'art/crops/batch-01/p001.png' --qa 'reports/p001.json'",
+        "",
+        "# 7. 页面排版、质检与最终导出",
+        f"& $python -X utf8 $cli compose --project '{root}'",
+        f"& $python -X utf8 $cli review-layout --project '{root}' --file 'reports/layout.json'",
+        f"& $python -X utf8 $cli export --project '{root}'",
+        f"& $python -X utf8 $cli verify-export --project '{root}'",
+        f"& $python -X utf8 $cli complete --project '{root}' --file 'reports/final.json'",
+        "```",
+        "",
+        "## 📝 本卷关键注记与特别要求",
+        "",
+        "- **跨卷人设继承**：请先查阅 `../docs/characters.md` 及前卷 `art/references/`，直接复用已通过的主角基准图。",
+        "- **全书美术规范**：严格遵守 `../docs/art_direction.md` 中定义的线条风格、配色规则与有组织留白要求。",
+        "- **叙事备忘**：",
+        "  - （待主代理在制作过程中补充记录新登场人物、场景变换或特定道具）",
+        "",
+        "## 📦 导出品交付路径",
+        "",
+    ]
+    if exports and isinstance(exports, dict) and 'files' in exports:
+        for f in exports.get('files', []):
+            kind = f.get('kind', 'file')
+            path = f.get('path', '')
+            lines.append(f"- **{kind.upper()}**：`{path}`")
+    else:
+        lines.append("- （尚未导出成品；完成所有画格与排版后执行 `export` 自动填充）")
+
+    lines.append("")
+    readme_path.write_text('\n'.join(lines), encoding='utf-8')
+    return str(readme_path)
+
+
 def run(args):
     command = args.command
     if command == 'init-book':
@@ -1684,8 +1854,10 @@ def run(args):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text + '\n', encoding='utf-8')
         save(root, project)
+        write_volume_readme(root, project)
         return {'project': str(root), 'title': project['title'], 'volume': project['volume'],
-                'chapters': len(source['chapters']), 'issues': source['issues']}
+                'chapters': len(source['chapters']), 'issues': source['issues'],
+                'readme': str(root / 'README.md')}
     project = project_load(root)
     if command == 'qa-inputs':
         return qa_inputs(root, project, args)
@@ -2125,6 +2297,8 @@ def run(args):
     else:
         raise GateError('Unknown command.')
     save(root, project)
+    if command in ('lock-script', 'export', 'complete'):
+        write_volume_readme(root, project)
     return {'ok': True, 'command': command, 'script_hash': digest(project['script'])}
 
 

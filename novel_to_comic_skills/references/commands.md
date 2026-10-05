@@ -53,7 +53,17 @@ $comicCli = '本技能 scripts/comic_pipeline.py 的绝对路径'
 
 - **原文移动与归档**：在创建书名项目时，原始小说文本应移动到书名项目的 `source_texts/` 目录中集中保管，不散落在项目外部或临时目录。
 - **切割文本统一存放**：长篇小说按卷或篇幅切割时，所有切割出的子文本统一存放在 `split_texts/` 目录中。
-- **顶层 README 与 docs 模块文档**：书名项目根目录下的 `README.md` 解释漫画项目的完整架构，并以 Markdown 链接形式索引和引导各个内容模块（`docs/overview.md` 等），这些模块随项目进展持续扩充和完善。
+- **书名顶层 README.md（全书总览与规范导览）**：书名项目根目录下的 `README.md` 承担全书层面的三大职责：
+  1. **分卷制作总览看板**：总览每一卷之类的信息（对应原文范围、工程子目录、核心剧情看点、制作阶段、导出品交付成果）；
+  2. **漫改全流程标准作业程序 (SOP)**：清晰阐明“应该怎么做”（原文归档切分、研读规范、分卷立项、通篇剧本三轮校验锁、基准图登记、多格生成与验收、页面合成、多格式导出交付等不可跳过的八步流程）；
+  3. **各种规范引导文件导航**：明确指出“规范引导文件在哪”，索引并引导阅读 `docs/` 文件夹中的模块文档（`overview.md` 作品概述、`structure.md` 目录规范、`worldview.md` 世界观体系、`characters.md` 角色视觉基准、`art_direction.md` 美术规范、`progress.md` 制作看板），且这些模块随制作推进持续丰富。
+- **分卷独立 README.md（本卷重要信息与状态看板）**：每一卷制作子目录（如 `第1卷/`）内必须维护独立的 `README.md`，记录本卷的重要信息：
+  1. **本卷基本信息**：所属作品、卷名、原文来源文件、章节数（含正文数）、有效原文段落数、本卷叙事焦点；
+  2. **制作状态看板**：原文确认、阅读进度、剧本锁与哈希指纹、基准参考数、画格通过数/计划数、排版状态、成品导出状态；
+  3. **本卷工程目录结构**：详细列出本卷子目录内各文件夹的职责与资产流转路径；
+  4. **常用操作命令速查**：提供针对本卷 `--project` 的状态查看、剧本审查锁定、基准登记、批次生成、排版导出的快捷命令；
+  5. **导出品交付路径**：直观展示阅读器、PDF、CBZ 的相对路径。
+  > 💡 运行 `init`、`lock-script`、`export`、`complete` 等命令时，脚本会自动创建和维护更新本卷的 `README.md`。
 - **跨卷资产复用**：后续卷可复用前卷已通过的人物与场景参考图基准（`art/references/` 与 `design/`），保持全书画风和形象高度统一。
 
 `set-script --file`、`review --file`、`begin-batch --plan --prompt` 及各类 QA 输入先写入当前卷的项目子目录。实际批次提示词按批次 ID 区分文件名；各格尝试指向同一次实际提示词，报告按审查类型与版本区分，避免覆盖仍被记录引用的文件。项目内自编资料和阅读器引用优先使用相对路径；工具调用使用实际绝对路径。工具输出目录无法指定时，保留返回的真实路径并复制原始输出到 `art/raw/`，再执行登记命令。技能程序、运行时、系统字体和用户外部原稿可保留原位置，作品相关副本与成果归档在项目内。
@@ -64,7 +74,7 @@ $comicCli = '本技能 scripts/comic_pipeline.py 的绝对路径'
 |---|---|---|
 | init-book | --book-dir 目录 [--title 书名] [--source 原文...] [--action move/copy] | 一键建立书名项目、移动原文至 source_texts、建立 split_texts、生成 docs/ 模块模板与顶层 README.md |
 | split-source | --book-dir 目录 --file 原文 [--output-dir 目标目录] [--pattern 正则] | 将长篇原文按卷切分并统一输出到 split_texts/ 目录 |
-| init | --source 一个或多个文件 [--title 书名] [--volume 卷名] | 新卷目录提取输入，创建空剧本与索引 |
+| init | --source 一个或多个文件 [--title 书名] [--volume 卷名] | 新卷目录提取输入，创建空剧本与索引，生成本卷 README.md |
 | chapter | [--chapter ID] | 读取真实原文单元；长篇一次只读所需章节 |
 | resolve-issue | --id 问题ID --evidence 证据 | 记录已经查明的提取问题 |
 | confirm-source | --note 证据 [--scope 范围说明] | 确认获取范围；所有提取问题须解决 |
@@ -72,7 +82,7 @@ $comicCli = '本技能 scripts/comic_pipeline.py 的绝对路径'
 | set-script | --file 完整或工作中剧本JSON | 导入稿件，变化使锁失效 |
 | check-script | 无 | 结构、引用、覆盖与状态检查，输出 script_hash |
 | review | --kind coverage/continuity/comic --file 报告JSON | 记录实际通过且版本一致的全书审查 |
-| lock-script | 无 | 三轮齐备且通过，冻结并输出 full-script.md |
+| lock-script | 无 | 三轮齐备且通过，冻结并输出 full-script.md，更新本卷 README.md |
 | assert-art | 无 | 任何生成/编辑图像前的全书关卡 |
 | qa-inputs | 新参考：--file 图像，加 --bindings 绑定文件或 --characters ID…；已登记参考：--reference ID；pending 画格：--panel ID --attempt N --file 图像 | 只读输出 QA 所需图像与输入指纹，不生成检查结论 |
 | register-reference | --file 图像 --qa 报告JSON；--bindings 绑定JSON 或 --characters 角色ID… | 登记基准并返回 reference_id；--characters 便捷入口绑定 base |
@@ -83,9 +93,9 @@ $comicCli = '本技能 scripts/comic_pipeline.py 的绝对路径'
 | fail-panel | --panel ID --attempt 尝试号 --reason 原因 [--outcome failed/cancelled/stale] | 即使锁失效也可结算旧 pending；不重置尝试上限 |
 | compose | [--font 字体路径] | 通过画格 → 图文排版 PNG |
 | review-layout | --file 报告JSON | 全部页面实际看图后登记 |
-| export | 无 | 导出离线阅读器、PDF、CBZ |
+| export | 无 | 导出离线阅读器、PDF、CBZ，更新本卷 README.md |
 | verify-export | 无 | 验证实际交付内容与顺序 |
-| complete | --file 最终报告JSON | 记录真实最终验收 |
+| complete | --file 最终报告JSON | 记录真实最终验收，更新本卷 README.md |
 | status | [--plan 单批计划或分组队列JSON] | 核验进度、逐格阻塞、未结算尝试与原稿警告；提供计划时返回容量和复用清单 |
 | script-chapter | --chapter ID | 只读取所需章节及相关人物、场景和相邻状态 |
 | set-script-chapter | --chapter ID --file 章节JSON | 合并单章修改并使全书锁失效 |

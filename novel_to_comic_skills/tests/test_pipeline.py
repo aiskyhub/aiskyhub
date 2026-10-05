@@ -570,8 +570,15 @@ class PipelineTests(unittest.TestCase):
 
         readme_text = (book_dir / 'README.md').read_text(encoding='utf-8')
         self.assertIn("# 《星辰变》漫画项目", readme_text)
+        self.assertIn("全书分卷制作总览看板", readme_text)
+        self.assertIn("怎么做：漫改全流程标准作业程序 (SOP)", readme_text)
+        self.assertIn("各种规范引导文件在哪", readme_text)
         self.assertIn("docs/overview.md", readme_text)
         self.assertIn("docs/structure.md", readme_text)
+        self.assertIn("docs/worldview.md", readme_text)
+        self.assertIn("docs/characters.md", readme_text)
+        self.assertIn("docs/art_direction.md", readme_text)
+        self.assertIn("docs/progress.md", readme_text)
         self.assertIn("source_texts/", readme_text)
         self.assertIn("split_texts/", readme_text)
 
@@ -592,7 +599,7 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("秦羽仰望星空", vol1_file.read_text(encoding='utf-8'))
         self.assertIn("海怪盘踞", vol2_file.read_text(encoding='utf-8'))
 
-        # 3. 验证以第1卷切割文本初始化该卷独立制作工作区
+        # 3. 验证以第1卷切割文本初始化该卷独立制作工作区，并验证生成该卷 README.md
         vol1_project = book_dir / '第1卷'
         vol1_init = cp.run(Namespace(
             command='init',
@@ -604,6 +611,15 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(vol1_init['title'], '星辰变')
         self.assertEqual(vol1_init['volume'], '第1卷')
         self.assertTrue((vol1_project / 'project.json').is_file())
+        vol1_readme = vol1_project / 'README.md'
+        self.assertTrue(vol1_readme.is_file(), "分卷目录下应自动生成 README.md")
+        vol1_readme_text = vol1_readme.read_text(encoding='utf-8')
+        self.assertIn("《星辰变》· 第1卷 漫画制作工程", vol1_readme_text)
+        self.assertIn("本卷基本信息", vol1_readme_text)
+        self.assertIn("制作状态看板", vol1_readme_text)
+        self.assertIn("本卷工程目录结构", vol1_readme_text)
+        self.assertIn("本卷常用操作命令速查", vol1_readme_text)
+        self.assertIn("导出品交付路径", vol1_readme_text)
 
 
 if __name__ == '__main__':
