@@ -1,6 +1,6 @@
 # 项目与数据契约（版本 1）
 
-`project.json` 由 helper 创建和更新，包含 source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在独立 JSON 文件写完整 script，通过 set-script 导入。schema_version 不匹配时保留项目并显式迁移。
+`project.json` 由 helper 创建和更新，包含 source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。schema_version 不匹配时保留项目并显式迁移。
 
 ## Source
 
