@@ -618,6 +618,8 @@ def export(root, project):
     destination = root / 'exports' / fingerprint[:12]
     destination.mkdir(parents=True, exist_ok=True)
     title = project['title']
+    if project.get('volume'):
+        title = f"{title} · {project['volume']}"
     pages = layout['pages']
     # file:// compatible: manifest is embedded; no fetch, server, CDN or third-party script.
     cards = ''.join('<figure data-chapter="' + html.escape(page['chapter_id'], quote=True) + '">'

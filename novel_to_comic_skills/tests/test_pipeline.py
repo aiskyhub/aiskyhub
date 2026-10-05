@@ -505,5 +505,40 @@ class PipelineTests(unittest.TestCase):
             self.invoke('compose', font=None)
 
 
+    def test_book_and_volume_hierarchy(self):
+        book_dir = self.base / '神作小说'
+        vol1_dir = book_dir / '第1卷'
+        from argparse import Namespace
+        init_res = cp.run(Namespace(command='init', project=str(vol1_dir),
+                                    source=[str(self.source)], title='神作小说', volume='第1卷'))
+        self.assertEqual(init_res['title'], '神作小说')
+        self.assertEqual(init_res['volume'], '第1卷')
+        loaded = cp.project_load(vol1_dir)
+        self.assertEqual(loaded['title'], '神作小说')
+        self.assertEqual(loaded['volume'], '第1卷')
+
+        status_res = cp.run(Namespace(command='status', project=str(vol1_dir), plan=None))
+        self.assertEqual(status_res['title'], '神作小说')
+        self.assertEqual(status_res['volume'], '第1卷')
+
+        # 校验剧本锁定后的 markdown 标题
+        cp.run(Namespace(command='confirm-source', project=str(vol1_dir), note='来源确认', scope=None))
+        for ch in loaded['source']['chapters']:
+            if ch['has_body']:
+                cp.run(Namespace(command='mark-read', project=str(vol1_dir), chapter=ch['id'], note='读完'))
+        script = fixture_script(loaded['source'])
+        script_file = self.json_file(script)
+        cp.run(Namespace(command='set-script', project=str(vol1_dir), file=script_file))
+        updated = cp.project_load(vol1_dir)
+        for kind, checks in cp.REVIEW_CHECKS.items():
+            report = {'script_hash': cp.digest(updated['script']),
+                      'reviewed_chapter_ids': [c['id'] for c in updated['source']['chapters'] if c['has_body']],
+                      'checks': {k: True for k in checks}, 'evidence': '测试证据', 'issues': []}
+            cp.run(Namespace(command='review', project=str(vol1_dir), kind=kind, file=self.json_file(report)))
+        cp.run(Namespace(command='lock-script', project=str(vol1_dir)))
+        full_md = (vol1_dir / 'full-script.md').read_text(encoding='utf-8')
+        self.assertIn('# 神作小说 · 第1卷 · 通篇漫画剧本', full_md)
+
+
 if __name__ == '__main__':
     unittest.main()

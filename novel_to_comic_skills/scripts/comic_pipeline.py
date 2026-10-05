@@ -1111,7 +1111,10 @@ def script_markdown(project):
     script = project['script']
     chapters = {c['id']: c for c in project['source']['chapters']}
     names = {c['id']: c['name'] for c in script['characters']}
-    parts = ['# ' + project['title'] + ' · 通篇漫画剧本', '', '剧本指纹：' + digest(script), '',
+    title_display = project['title']
+    if project.get('volume'):
+        title_display += f" · {project['volume']}"
+    parts = ['# ' + title_display + ' · 通篇漫画剧本', '', '剧本指纹：' + digest(script), '',
              '## 全书结构', script['outline'], '', '## 原文收尾', script['ending'], '']
     parts += ['## 人物设计档案', '']
     for character in script.get('characters', []):
@@ -1392,7 +1395,9 @@ def run(args):
         template = load_json(Path(__file__).resolve().parents[1] / 'assets' / 'script-template.json')
         root.mkdir(parents=True, exist_ok=True)
         archive_source_inputs(root, source)
-        project = {'schema_version': SCHEMA_VERSION, 'title': args.title or Path(args.source[0]).stem,
+        title = args.title or Path(args.source[0]).stem
+        volume = getattr(args, 'volume', None) or ''
+        project = {'schema_version': SCHEMA_VERSION, 'title': title, 'volume': volume,
                    'created_at': now(), 'source': source, 'source_index_hash': index_hash(source),
                    'script': template, 'reviews': [], 'script_lock': None,
                    'art': {'references': [], 'panels': {}, 'bindings': {}, 'batches': {}},
@@ -1403,7 +1408,8 @@ def run(args):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text + '\n', encoding='utf-8')
         save(root, project)
-        return {'project': str(root), 'chapters': len(source['chapters']), 'issues': source['issues']}
+        return {'project': str(root), 'title': project['title'], 'volume': project['volume'],
+                'chapters': len(source['chapters']), 'issues': source['issues']}
     project = project_load(root)
     if command == 'qa-inputs':
         return qa_inputs(root, project, args)
@@ -1819,7 +1825,8 @@ def run(args):
         source_warnings = external_source_warnings(project)
         from comic_batches import batch_summary
         batch_counts, batches, planned_batches = batch_summary(root, project, accepted, getattr(args, 'plan', None))
-        return {'complete': complete, 'source_scope': source_data.get('scope_note'),
+        return {'complete': complete, 'title': project.get('title'), 'volume': project.get('volume', ''),
+                'source_scope': source_data.get('scope_note'),
                 'chapters_with_body': sum(bool(c.get('has_body')) for c in source_chapters),
                 'chapters_read': sum(bool(c.get('has_body') and c.get('read')) for c in source_chapters),
                 'script_hash': digest(project.get('script')), 'script_locked': locked,
@@ -1858,6 +1865,7 @@ def parser():
         if name == 'init':
             sub.add_argument('--source', nargs='+', required=True)
             sub.add_argument('--title')
+            sub.add_argument('--volume')
         if name == 'qa-inputs':
             sub.add_argument('--file')
             sub.add_argument('--bindings')
