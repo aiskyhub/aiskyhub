@@ -1,5 +1,6 @@
 """Synthetic pixels validate accounting/extraction, never artistic quality."""
 import copy
+import json
 import subprocess
 import sys
 import unittest
@@ -15,11 +16,11 @@ class BatchTests(unittest.TestCase):
     def setUp(self):
         self.f = self.fresh()
 
-    def fresh(self):
+    def fresh(self, count=4):
         f = fixtures.PipelineTests('runTest')
         f.setUp()
         self.addCleanup(f.doCleanups)
-        f.mixed_script()
+        f.mixed_script(count=count)
         f.add_reviews()
         f.invoke('lock-script')
         f.reference()
@@ -29,7 +30,7 @@ class BatchTests(unittest.TestCase):
         ids = ids or [f'p{i+1}' for i in range(count)]
         cols = 1 if count == 1 else 2
         rows = (count + cols - 1) // cols
-        return {'panels': [{'panel_id': pid,
+        return {'canvas_pixels': [900 * cols, 600 * max(1, rows)], 'panels': [{'panel_id': pid,
                             'target_region': [(i % cols) / cols, (i // cols) / rows, 1 / cols, 1 / rows],
                             'min_pixels': [900, 600]} for i, pid in enumerate(ids)]}
 
@@ -49,7 +50,7 @@ class BatchTests(unittest.TestCase):
         regions = {}
         for i in range(count):
             x, y = 900 * (i % cols), 600 * (i // cols)
-            draw.rectangle((x, y, x + 899, y + 599), fill=colors[i])
+            draw.rectangle((x, y, x + 899, y + 599), fill=colors[i % len(colors)])
             draw.line((x + 13, y + 11, x + 881, y + 583), fill='black', width=1)
             draw.rectangle((x + 27, y + 39, x + 83, y + 91), fill='white')
             regions[f'p{i+1}'] = [x, y, 900, 600]
@@ -66,10 +67,10 @@ class BatchTests(unittest.TestCase):
         f.invoke('finish-panel', panel=item['panel_id'], attempt=item['attempt'], file=item['file'],
                  qa=f.panel_qa(item['panel_id'], item['attempt'], item['file']))
 
-    def test_one_two_four_panels_extract_exact_pixels_and_reading_order(self):
-        for count in (1, 2, 4):
+    def test_capacity_driven_batches_extract_exact_pixels_and_reading_order(self):
+        for count in (1, 2, 4, 6, 8, 10):
             with self.subTest(count=count):
-                f = self.fresh()
+                f = self.fresh(count=max(4, count))
                 batch = self.start(self.plan(count), f)
                 raw, regions = self.image(count, f)
                 result = self.split(batch, raw, regions, f)
@@ -100,8 +101,18 @@ class BatchTests(unittest.TestCase):
         self.accept(items[0])
         f = self.f
         f.invoke('fail-panel', panel='p2', attempt=1, reason='机械测试：第二格需要返修')
-        retry = self.start(self.plan(2))
-        self.assertEqual(['p1'], [p['panel_id'] for p in retry['reused']])
+        original_plan = self.plan(2)
+        before = (f.root / 'project.json').read_bytes()
+        preflight = f.invoke('preflight', plan=f.json_file(original_plan))
+        planned = preflight['planned_batches'][0]
+        self.assertEqual(['p1'], planned['reused_panel_ids'])
+        self.assertEqual(['p2'], planned['active_panel_ids'])
+        self.assertTrue(planned['requires_repack'])
+        with self.assertRaisesRegex(cp.GateError, 'repack'):
+            self.start(original_plan)
+        self.assertEqual(before, (f.root / 'project.json').read_bytes())
+        retry = self.start(self.plan(1, ['p2']))
+        self.assertEqual([], retry['reused'])
         self.assertEqual(['p2'], [p['panel_id'] for p in retry['panels']])
         self.assertEqual(2, retry['panels'][0]['attempt'])
         self.assertEqual([0, 0, 1, 1], retry['panels'][0]['target_region'])
@@ -143,7 +154,7 @@ class BatchTests(unittest.TestCase):
 
     def test_invalid_plans_leave_no_attempts(self):
         valid = self.plan(2)
-        invalid = [self.plan(0), self.plan(5), self.plan(2, ['p2', 'p1']), self.plan(2, ['p1', 'p1']),
+        invalid = [self.plan(0), self.plan(2, ['p2', 'p1']), self.plan(2, ['p1', 'p1']),
                    self.plan(1, ['unknown'])]
         for key, value in (('target_region', [-1, 0, 1, 1]), ('target_region', [0, 0, 2, 1]),
                            ('min_pixels', [1, 1]), ('min_pixels', [True, 600]),
@@ -284,26 +295,27 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(1, counts['planned_generation_calls'])
         self.assertEqual(0, counts['batches_with_raw'])
 
-    def test_schema_v2_and_old_cli_are_rejected_without_migration(self):
+    def test_old_schemas_and_old_cli_are_rejected_without_migration(self):
         f = self.f
         project = cp.project_load(f.root)
-        project['schema_version'] = 2
-        cp.atomic_json(f.root / 'project.json', project)
-        before = (f.root / 'project.json').read_bytes()
-        with self.assertRaisesRegex(cp.GateError, 'only schema v3'):
-            f.invoke('status')
-        self.assertEqual(before, (f.root / 'project.json').read_bytes())
+        for version in (1, 2, 3):
+            project['schema_version'] = version
+            cp.atomic_json(f.root / 'project.json', project)
+            before = (f.root / 'project.json').read_bytes()
+            with self.assertRaisesRegex(cp.GateError, 'only schema v4'):
+                f.invoke('status')
+            self.assertEqual(before, (f.root / 'project.json').read_bytes())
         result = subprocess.run([sys.executable, '-B', str(Path(cp.__file__)), 'begin-panel',
                                  '--project', str(f.root)], capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(2, result.returncode)
         self.assertIn('invalid choice', result.stderr)
 
-    def test_new_project_runs_four_panel_batch_through_complete_exports(self):
-        f = self.f
-        batch = self.start(self.plan(4))
-        raw, regions = self.image(4)
-        for item in self.split(batch, raw, regions)['panels']:
-            self.accept(item)
+    def test_new_project_runs_eight_panel_batch_through_complete_exports(self):
+        f = self.fresh(count=8)
+        batch = self.start(self.plan(8), f)
+        raw, regions = self.image(8, f)
+        for item in self.split(batch, raw, regions, f)['panels']:
+            self.accept(item, f)
         f.invoke('compose', font=None)
         f.review_and_export()
         verified = f.invoke('verify-export')
@@ -314,4 +326,109 @@ class BatchTests(unittest.TestCase):
                   'evidence': '机械夹具，只验证接口与实际导出文件完整性，不是人工看图结论。'}
         f.invoke('complete', file=f.json_file(report))
         self.assertTrue(f.invoke('status')['complete'])
-        self.assertEqual(3, project['schema_version'])
+        self.assertEqual(4, project['schema_version'])
+
+    def test_canvas_budget_is_required_and_rejections_do_not_register_attempts(self):
+        valid = self.plan(2)
+        before = (self.f.root / 'project.json').read_bytes()
+        for canvas in (None, [], [True, 600], [1800, 600.0], [0, 600],
+                       [1799, 600], [1800, 599], [12001, 600], [6000, 6000]):
+            plan = copy.deepcopy(valid)
+            if canvas is None:
+                del plan['canvas_pixels']
+            else:
+                plan['canvas_pixels'] = canvas
+            with self.subTest(canvas=canvas), self.assertRaises(cp.GateError):
+                self.start(plan)
+            self.assertEqual(before, (self.f.root / 'project.json').read_bytes())
+        result = self.f.invoke('preflight', plan=self.f.json_file(valid))
+        self.assertEqual([1800, 600], result['planned_batches'][0]['required_canvas_pixels'])
+        self.assertEqual(['p1', 'p2'], result['planned_batches'][0]['active_panel_ids'])
+        self.assertFalse(result['planned_batches'][0]['requires_repack'])
+        self.assertEqual(before, (self.f.root / 'project.json').read_bytes())
+
+    def test_unequal_regions_and_fractional_rows_have_correct_capacity(self):
+        plan = self.plan(2)
+        plan['panels'][0]['target_region'] = [0, 0, .6, 1]
+        plan['panels'][1]['target_region'] = [.6, 0, .4, 1]
+        plan['canvas_pixels'] = [2250, 600]
+        result = self.f.invoke('preflight', plan=self.f.json_file(plan))
+        self.assertEqual([2250, 600], result['planned_batches'][0]['required_canvas_pixels'])
+        f = self.fresh(count=6)
+        result = f.invoke('preflight', plan=f.json_file(self.plan(6)))
+        self.assertEqual([1800, 1800], result['planned_batches'][0]['required_canvas_pixels'])
+        plan['canvas_pixels'][0] -= 1
+        with self.assertRaisesRegex(cp.GateError, 'required_canvas_pixels'):
+            self.start(plan)
+
+    def test_multiple_failed_panels_are_repacked_without_redrawing_successes(self):
+        batch = self.start(self.plan(4))
+        raw, regions = self.image(4)
+        items = self.split(batch, raw, regions)['panels']
+        self.accept(items[0])
+        self.accept(items[2])
+        for pid in ('p2', 'p4'):
+            self.f.invoke('fail-panel', panel=pid, attempt=1, reason='机械返修')
+        retry = self.start(self.plan(2, ['p2', 'p4']))
+        self.assertEqual(['p2', 'p4'], [p['panel_id'] for p in retry['panels']])
+        self.assertEqual([2, 2], [p['attempt'] for p in retry['panels']])
+        raw, regions = self.image(2)
+        repair_regions = {'p2': regions['p1'], 'p4': regions['p2']}
+        for item in self.split(retry, raw, repair_regions)['panels']:
+            self.accept(item)
+        project = cp.project_load(self.f.root)
+        self.assertEqual(4, self.f.invoke('status')['panels_accepted'])
+        self.assertEqual([1, 2, 1, 2], [len(project['art']['panels'][f'p{i}']) for i in range(1, 5)])
+        self.assertEqual(items[0]['sha256'], project['art']['panels']['p1'][0]['sha256'])
+
+    def test_canvas_tampering_invalidates_batch_hash(self):
+        batch = self.start(self.plan(2))
+        raw, regions = self.image(2)
+        items = self.split(batch, raw, regions)['panels']
+        self.accept(items[0])
+        project = cp.project_load(self.f.root)
+        project['art']['batches'][batch['batch_id']]['canvas_pixels'][0] += 1
+        cp.save(self.f.root, project)
+        self.assertEqual(0, self.f.invoke('status')['panels_accepted'])
+        with self.assertRaisesRegex(cp.GateError, 'plan or prompt changed'):
+            self.split(batch, raw, regions)
+
+    def test_planned_canvas_is_a_target_and_actual_crop_pixels_decide_acceptance(self):
+        plan = self.plan(2)
+        plan['canvas_pixels'] = [3600, 1200]
+        batch = self.start(plan)
+        raw, regions = self.image(2)
+        result = self.split(batch, raw, regions)
+        self.assertEqual([3600, 1200], batch['canvas_pixels'])
+        self.assertEqual([1800, 600], [result['raw']['width'], result['raw']['height']])
+        for item in result['panels']:
+            self.accept(item)
+        self.assertEqual(2, self.f.invoke('status')['panels_accepted'])
+
+    def test_cross_page_batch_preserves_final_page_order(self):
+        f = fixtures.PipelineTests('runTest')
+        f.setUp()
+        self.addCleanup(f.doCleanups)
+        f.locked()
+        f.reference()
+        plan = self.plan(2)
+        batch = self.start(plan, f)
+        raw, regions = self.image(2, f)
+        for item in self.split(batch, raw, regions, f)['panels']:
+            self.accept(item, f)
+        self.assertEqual([['p1'], ['p2']], [p['panel_ids'] for p in cp.project_load(f.root)['script']['pages']])
+        self.assertEqual(2, f.invoke('status')['panels_accepted'])
+
+    def test_cli_status_and_preflight_expose_the_same_read_only_plan(self):
+        plan = self.f.json_file(self.plan(2))
+        before = (self.f.root / 'project.json').read_bytes()
+        responses = []
+        for command in ('status', 'preflight'):
+            result = subprocess.run([sys.executable, '-B', str(Path(cp.__file__)), command,
+                                     '--project', str(self.f.root), '--plan', plan],
+                                    capture_output=True, text=True, encoding='utf-8')
+            self.assertEqual(0, result.returncode, result.stderr)
+            responses.append(json.loads(result.stdout)['planned_batches'])
+        self.assertEqual(responses[0], responses[1])
+        self.assertEqual([1800, 600], responses[0][0]['required_canvas_pixels'])
+        self.assertEqual(before, (self.f.root / 'project.json').read_bytes())

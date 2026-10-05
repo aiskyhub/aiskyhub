@@ -98,7 +98,7 @@ class PipelineTests(unittest.TestCase):
 
     def begin_one(self, panel, prompt):
         """Exercise the unified batch interface for existing single-frame scenarios."""
-        plan = {'panels': [{'panel_id': panel, 'target_region': [0, 0, 1, 1],
+        plan = {'canvas_pixels': [1536, 1024], 'panels': [{'panel_id': panel, 'target_region': [0, 0, 1, 1],
                             'min_pixels': [1536, 1024]}]}
         result = self.invoke('begin-batch', plan=self.json_file(plan), prompt=str(prompt))
         if result['already_accepted']:
@@ -187,17 +187,21 @@ class PipelineTests(unittest.TestCase):
         self.invoke('review-layout', file=self.json_file(report))
         self.invoke('export')
 
-    def mixed_script(self, direction='ltr', max_height=6000):
+    def mixed_script(self, direction='ltr', max_height=6000, count=4):
         self.root = self.base / ('混合分格-' + direction)
         source = self.base / (direction + '.txt')
-        source.write_text('第1章 场景\n甲进入房间。\n甲打开信封。\n甲读完信。\n甲走到窗前。\n', encoding='utf-8')
+        source.write_text('第1章 场景\n甲进入房间。\n甲打开信封。\n甲读完信。\n甲走到窗前。\n'
+                          + ''.join(f'甲观察第{i}件物品。\n' for i in range(5, count + 1)), encoding='utf-8')
         self.invoke('init', source=[str(source)], title='混合分格机械测试')
         script = self.prepare_script()
         script['style'].update(format='strip', reading_direction=direction, max_segment_height=max_height)
         for panel in script['panels']:
             panel['dialogue'] = []
+        rows = [['p1'], ['p2', 'p3'], ['p4']]
+        rows.extend([f'p{i}' for i in range(start, min(start + 2, count + 1))]
+                    for start in range(5, count + 1, 2))
         script['pages'] = [{'id': 'page-mixed', 'chapter_id': script['panels'][0]['chapter_id'],
-                            'panel_ids': ['p1', 'p2', 'p3', 'p4'], 'rows': [['p1'], ['p2', 'p3'], ['p4']]}]
+                            'panel_ids': [p['id'] for p in script['panels']], 'rows': rows}]
         self.invoke('set-script', file=self.json_file(script))
         return script
 

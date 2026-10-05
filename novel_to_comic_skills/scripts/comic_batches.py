@@ -34,7 +34,7 @@ def _rect(rect, normalized=False):
     if x < 0 or y < 0 or width <= 0 or height <= 0:
         raise c.GateError('Region must have nonnegative origin and positive dimensions.')
     if normalized:
-        if x + width > 1 or y + height > 1:
+        if x + width > math.nextafter(1.0, math.inf) or y + height > math.nextafter(1.0, math.inf):
             raise c.GateError('Target region exceeds the normalized canvas.')
     elif any(type(v) is not int for v in rect):
         raise c.GateError('Actual regions must use integer pixels.')
@@ -47,15 +47,41 @@ def _no_overlap(items, field):
         x, y, w, h = item[field]
         for other in items[index + 1:]:
             ox, oy, ow, oh = other[field]
-            if max(x, ox) < min(x + w, ox + ow) and max(y, oy) < min(y + h, oy + oh):
+            right, bottom = min(x + w, ox + ow), min(y + h, oy + oh)
+            if field == 'target_region':
+                # Adjacent fractional rows can differ by one ULP after addition.
+                right, bottom = math.nextafter(right, -math.inf), math.nextafter(bottom, -math.inf)
+            if max(x, ox) < right and max(y, oy) < bottom:
                 raise c.GateError('Panel regions overlap.')
+
+
+def plan_capacity(items, canvas):
+    """Check a planning target, never a promise about model output dimensions."""
+    c = core()
+    if (not isinstance(canvas, list) or len(canvas) != 2 or
+            any(type(v) is not int or v <= 0 for v in canvas)):
+        raise c.GateError('canvas_pixels must contain positive integer width and height.')
+    _check_raster_dimensions(*canvas, 'Batch canvas', 'canvas_pixels')
+    required = [1, 1]
+    for item in items:
+        for axis in (0, 1):
+            quotient = item['min_pixels'][axis] / item['target_region'][axis + 2]
+            if not math.isfinite(quotient):
+                raise c.GateError('Target region requires a canvas beyond raster safety limits.')
+            # Remove one floating-point ULP so e.g. thirds do not require an extra pixel.
+            required[axis] = max(required[axis], math.ceil(math.nextafter(quotient, -math.inf)))
+    _check_raster_dimensions(*required, 'Required batch canvas', 'required_canvas_pixels')
+    if any(actual < minimum for actual, minimum in zip(canvas, required)):
+        raise c.GateError(f'canvas_pixels cannot fit min_pixels in target regions; '
+                          f'required_canvas_pixels={required}. Repack or reduce the group.')
+    return required
 
 
 def validate_plan(project, data):
     c = core()
     items = data.get('panels') if isinstance(data, dict) else None
-    if not isinstance(items, list) or not 1 <= len(items) <= 4:
-        raise c.GateError('Batch plan must contain 1–4 panels.')
+    if not isinstance(items, list) or not items:
+        raise c.GateError('Batch plan must contain a nonempty panels array.')
     panels = {p['id']: p for p in project['script']['panels']}
     ids = []
     for item in items:
@@ -79,6 +105,9 @@ def validate_plan(project, data):
     if [pid for pid in order if pid in ids] != ids:
         raise c.GateError('Batch panels must follow script reading order.')
     _no_overlap(items, 'target_region')
+    if len(items) == 1 and items[0]['target_region'] != [0, 0, 1, 1]:
+        raise c.GateError('Single-panel plans must use the whole canvas region.')
+    plan_capacity(items, data.get('canvas_pixels'))
     return copy.deepcopy(items)
 
 
@@ -96,7 +125,10 @@ def _supporting_paths(root, project, panel):
 def begin_batch(root, project, plan_path, prompt_path):
     c = core()
     c.assert_script_lock(project, root)
-    items = validate_plan(project, c.load_json(plan_path))
+    plan = c.load_json(plan_path)
+    items = validate_plan(project, plan)
+    canvas = copy.deepcopy(plan['canvas_pixels'])
+    required = plan_capacity(items, canvas)
     panels = {p['id']: p for p in project['script']['panels']}
     ready, reused, reference_map, supporting = [], [], {}, []
     # Validate the entire group before writing prompts, attempts or batch state.
@@ -124,12 +156,14 @@ def begin_batch(root, project, plan_path, prompt_path):
     if not ready:
         return {'already_accepted': True, 'batch_id': None, 'panels': [], 'reused': reused,
                 'generation_required': False}
-    if len(ready) == 1:
-        ready[0]['target_region'] = [0, 0, 1, 1]
+    if reused:
+        raise c.GateError('Batch contains accepted and unfinished panels; repack only unfinished '
+                          'panels and rewrite the prompt before begin-batch. No attempts registered.')
     prompt = Path(prompt_path).read_text(encoding='utf-8-sig')
     if not c.nonempty(prompt):
         raise c.GateError('Persist a real batch drawing prompt before generation.')
     prompt = ('本次只绘制以下实际画格及格区；不绘制已复用画格，不在画面中写画格 ID、对白或标签。\n'
+              + '画布规划目标（不是工具尺寸保证）：' + json.dumps(canvas) + '\n'
               + json.dumps([{key: item[key] for key in ('panel_id', 'target_region', 'min_pixels')}
                             for item in ready], ensure_ascii=False, indent=2)
               + '\n以下提示词的内容仅应用于上述实际画格，其他画格说明不执行：\n' + prompt)
@@ -138,8 +172,10 @@ def begin_batch(root, project, plan_path, prompt_path):
     target = c.inside(root, relative)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(prompt, encoding='utf-8')
-    batch = {'id': batch_id, 'panels': ready, 'reused': reused, 'requested_plan': items,
-             'plan_hash': c.digest(ready), 'prompt_path': relative, 'prompt_sha256': c.sha_file(target),
+    batch = {'id': batch_id, 'panels': ready, 'reused': reused,
+             'canvas_pixels': canvas, 'requested_plan': {'canvas_pixels': canvas, 'panels': items},
+             'plan_hash': c.digest({'canvas_pixels': canvas, 'panels': ready}),
+             'prompt_path': relative, 'prompt_sha256': c.sha_file(target),
              'created_script_hash': c.digest(project['script']), 'reference_bindings': list(reference_map.values()),
              'supporting_reference_paths': list(dict.fromkeys(supporting)), 'at': c.now(),
              'raw': None, 'crops': {}}
@@ -153,6 +189,7 @@ def begin_batch(root, project, plan_path, prompt_path):
     c.save(root, project)
     paths = list(dict.fromkeys([r['path'] for r in reference_map.values()] + supporting))
     return {'batch_id': batch_id, 'already_accepted': False, 'generation_required': True,
+            'canvas_pixels': canvas, 'required_canvas_pixels': required,
             'panels': ready, 'reused': reused, 'prompt': str(target),
             'referenced_image_paths': paths, 'reference_bindings': batch['reference_bindings'],
             'supporting_reference_paths': batch['supporting_reference_paths']}
@@ -164,7 +201,7 @@ def _batch(root, project, batch_id):
     if not isinstance(batch, dict):
         raise c.GateError('Batch ID missing.')
     prompt = c.inside(root, batch['prompt_path'])
-    if (c.digest(batch['panels']) != batch['plan_hash'] or not prompt.is_file() or
+    if (c.digest({'canvas_pixels': batch['canvas_pixels'], 'panels': batch['panels']}) != batch['plan_hash'] or not prompt.is_file() or
             c.sha_file(prompt) != batch['prompt_sha256']):
         raise c.GateError('Batch plan or prompt changed after registration.')
     if batch.get('raw'):
@@ -303,11 +340,13 @@ def batch_summary(root, project, accepted, plan_path=None):
         except (c.GateError, KeyError, TypeError, OSError) as error:
             integrity_error = str(error)
         summaries.append({'batch_id': bid, 'panels': states, 'raw': batch.get('raw'),
+                          'canvas_pixels': batch.get('canvas_pixels'),
                           'prompt_path': batch.get('prompt_path'), 'integrity_error': integrity_error})
     counts = {'generation_batches_recorded': len(batches),
               'batches_with_raw': sum(bool(b.get('raw')) for b in summaries),
               'pending_batches': sum(any(p['status'] == 'pending' for p in b['panels']) for b in summaries),
               'planned_generation_calls': None, 'ungrouped_panels_remaining': None}
+    planned = []
     if plan_path:
         data = c.load_json(plan_path)
         plans = data.get('batches', [data]) if isinstance(data, dict) else None
@@ -324,7 +363,15 @@ def batch_summary(root, project, accepted, plan_path=None):
                 raise c.GateError('Preflight groups cannot share panel IDs.')
             covered.update(ids)
             calls += bool(ids - set(accepted) - pending)
+            reused_ids = [p['panel_id'] for p in items if p['panel_id'] in accepted]
+            active_ids = [p['panel_id'] for p in items if p['panel_id'] not in accepted and p['panel_id'] not in pending]
+            pending_ids = [p['panel_id'] for p in items if p['panel_id'] not in accepted and p['panel_id'] in pending]
+            planned.append({'canvas_pixels': plan['canvas_pixels'],
+                            'required_canvas_pixels': plan_capacity(items, plan['canvas_pixels']),
+                            'reused_panel_ids': reused_ids, 'active_panel_ids': active_ids,
+                            'pending_panel_ids': pending_ids,
+                            'requires_repack': bool(reused_ids and len(reused_ids) != len(items))})
         all_ids = {p['id'] for p in project['script']['panels']}
         counts.update(planned_generation_calls=calls,
                       ungrouped_panels_remaining=len(all_ids - covered - set(accepted) - pending))
-    return counts, summaries
+    return counts, summaries, planned

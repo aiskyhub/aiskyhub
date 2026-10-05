@@ -1,6 +1,6 @@
 # 项目与数据契约（版本 3）
 
-`project.json` 由 helper 创建和更新，包含 source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。仅支持 schema_version=3；其他版本明确拒绝，不提供迁移，也不修改已有旧项目或补历史通过结论。
+`project.json` 由 helper 创建和更新，包含 source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。仅支持 schema_version=4；其他版本明确拒绝，不提供迁移，也不修改已有旧项目或补历史通过结论。
 
 ## Source
 
@@ -112,10 +112,13 @@ script-chapter 输出章节集合及相关人物、场景与相邻状态；set-s
 
 ## 批次计划、裁切与尝试
 
-单格和多格都使用 begin-batch；计划不修改冻结剧情，只描述本次生成的制作格区和最低像素。panels 为 1–4 项，ID 不重复、按剧本顺序排列；target_region 是归一化 [x,y,w,h]，区域不能重叠；min_pixels 是最低原生 [width,height]，不能低于成品展示尺寸。没有 aspect_ratio 时用计划像素比例确定预期高度，实际验收再按裁切图与排版画幅核查无需放大。
+单格和多格都使用 begin-batch；计划不修改冻结剧情，只描述本次生成的制作格区和最低像素。panels 为非空数组，无固定格数上限；ID 不重复、按剧本顺序排列，可跨成品页面。target_region 是归一化 [x,y,w,h]，区域不能重叠，单格必须为 [0,0,1,1]。min_pixels 是最低原生 [width,height]，不能低于成品展示尺寸。没有 aspect_ratio 时用计划像素比例确定预期高度，实际验收再按裁切图与排版画幅核查无需放大。
+
+canvas_pixels 为必填的正整数 [width,height] 规划目标，各格区域份额必须能容纳其 min_pixels。所需最低画布由每方向最大的 ceil(min_pixels/区域份额) 决定，仅消除一个浮点 ULP 的整数边界误差；规划画布与所需画布每边不超过 12,000、总像素不超过 24,000,000。预算不足启动前拒绝，且不登记尝试；不能用扩大规划值冒充工具已经具备大图能力。
 
 ```json
 {
+  "canvas_pixels": [3072,1024],
   "panels": [
     {"panel_id":"p1","target_region":[0,0,0.5,1],"min_pixels":[1536,1024]},
     {"panel_id":"p2","target_region":[0.5,0,0.5,1],"min_pixels":[1536,1024]}
@@ -123,7 +126,7 @@ script-chapter 输出章节集合及相关人物、场景与相邻状态；set-s
 }
 ```
 
-以上尺寸只是计划示例，不能当作工具保证；按作品真实画幅、复杂度与输出能力调整。begin-batch 返回 batch_id、panels（含 attempt/render_hash/reference_ids）、reused、prompt 和去重 referenced_image_paths；generation_required=false 表示无需生成。部分复用时以实际 panels 为准，只有一个剩余格时 target_region 自动改为整图，登记提示词增加实际清单。
+以上尺寸只是计划示例，不能当作工具保证；按作品真实画幅、复杂度与输出能力调整。assets/batch-plan-template.json 提供紧凑多格规划示例，同样不代表该尺寸和复杂度已通过实际出图验证。begin-batch 返回 batch_id、panels（含 attempt/render_hash/reference_ids）、canvas_pixels、required_canvas_pixels、reused、prompt 和去重 referenced_image_paths；generation_required=false 表示全部复用，无需生成。混有已通过与未完成格时拒绝，须先排除复用格、重排剩余格区并重写提示词，不自动沿用或修改旧格区。
 
 实际格区 JSON 以本次生成的每个画格 ID 为键，值是整数像素 [x,y,w,h]，必须恰好覆盖实际生成格，不包含 reused。示例：
 
@@ -133,6 +136,8 @@ script-chapter 输出章节集合及相关人物、场景与相邻状态；set-s
 
 split-batch 先保留原图，再检查格区结构；结构错误不提取，像素不足的格单独加入 rejected_panels，其他格提取保留。返回 panels 中包含实际可用裁切的 file、sha256、region、width、height 及原尝试绑定；尚未通过 QA。登记过的裁切格区不可更改，未提取格可修正格界后用同一原图恢复。
 
-art.batches 按 batch_id 索引，记录实际 panels、requested_plan、plan_hash、实际提示词路径/哈希、参考用途和对象、原图路径/哈希/尺寸、crops、extraction_issues 与时间。每个 art.panels 尝试必须有 batch_id；每格的 number、render_hash、状态、参考和 QA 仍独立。一个批次实际生成一次，每格各增加一次尝试；分组与提示词不参与刷新视觉输入预算。
+art.batches 按 batch_id 索引，记录实际 panels、canvas_pixels、requested_plan（含 canvas_pixels 和原计划 panels）、plan_hash、实际提示词路径/哈希、参考用途和对象、原图路径/哈希/尺寸、crops、extraction_issues 与时间。plan_hash 绑定 {canvas_pixels,panels}；规划目标和实际 raw.width/raw.height 分开记录。每个 art.panels 尝试必须有 batch_id；每格的 number、render_hash、状态、参考和 QA 仍独立。一个批次实际生成一次，每格各增加一次尝试；分组与提示词不参与刷新视觉输入预算。
 
 QA、通过记录及后续复用都要求登记原图、提示词和裁切文件仍与哈希一致，且本格输入和尝试号一致。只有 finish-panel 才登记通过。纯裁切不计新绘图尝试；新生成或图像编辑必须建立新批次。preflight 的队列可写成 {"batches":[批次计划,批次计划]}，各组不能共享画格 ID，接口只读且不预留尝试。
+
+preflight --plan 和 status --plan 在顶层返回 planned_batches，顺序与队列一致。每项含 canvas_pixels、required_canvas_pixels、reused_panel_ids、active_panel_ids、pending_panel_ids、requires_repack；各 ID 清单遵循原计划顺序。active 不含已通过或 pending 格，但仍须核对 panel_blockers，不能当作已经具备生成条件。混有复用与未完成格时 requires_repack=true，pending 格先恢复结算。全复用计划无需调用，planned_batches 未传计划时为空数组。调用量按重排后的候选分组估算，实际重排若拆成多组需再次 preflight；统计不包含设定图调用或平台剩余额度。

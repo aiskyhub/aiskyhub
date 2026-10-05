@@ -16,7 +16,7 @@ from pathlib import Path
 
 from comic_sources import SourceError, extract, sha_file
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 REVIEW_CHECKS = {
     'coverage': ['all_source_read', 'events_preserved', 'arcs_preserved', 'ending_preserved'],
     'continuity': ['causality', 'timeline', 'identity', 'states', 'knowledge_and_reveals'],
@@ -72,7 +72,7 @@ def project_load(root):
         raise GateError('project: expected an object.')
     version = project.get('schema_version')
     if version != SCHEMA_VERSION:
-        raise GateError('Unsupported project schema; only schema v3 is supported. No migration is provided.')
+        raise GateError('Unsupported project schema; only schema v4 is supported. No migration is provided.')
     return project
 
 
@@ -781,7 +781,9 @@ def art_structure_errors(project):
     else:
         for batch_id, batch in batches.items():
             if (not nonempty(batch_id) or not isinstance(batch, dict) or
-                    not isinstance(batch.get('panels'), list) or not 1 <= len(batch['panels']) <= 4 or
+                    not isinstance(batch.get('panels'), list) or not batch['panels'] or
+                    not isinstance(batch.get('canvas_pixels'), list) or len(batch['canvas_pixels']) != 2 or
+                    any(type(v) is not int or v <= 0 for v in batch['canvas_pixels']) or
                     any(not isinstance(item, dict) or not nonempty(item.get('panel_id')) or
                         type(item.get('attempt')) is not int for item in batch['panels'])):
                 errors.append(f'art.batches[{batch_id}]: malformed batch record.')
@@ -1816,7 +1818,7 @@ def run(args):
         refs = refs if isinstance(refs, list) else []
         source_warnings = external_source_warnings(project)
         from comic_batches import batch_summary
-        batch_counts, batches = batch_summary(root, project, accepted, getattr(args, 'plan', None))
+        batch_counts, batches, planned_batches = batch_summary(root, project, accepted, getattr(args, 'plan', None))
         return {'complete': complete, 'source_scope': source_data.get('scope_note'),
                 'chapters_with_body': sum(bool(c.get('has_body')) for c in source_chapters),
                 'chapters_read': sum(bool(c.get('has_body') and c.get('read')) for c in source_chapters),
@@ -1835,7 +1837,8 @@ def run(args):
                                      'panels_remaining': len(panels) - len(accepted),
                                      'current_input_attempt_slots': remaining_slots,
                                      'panels_with_unknown_budget': unknown_budget_count, **batch_counts},
-                'panel_blockers': panel_blockers, 'attempts': attempt_summary, 'batches': batches}
+                'panel_blockers': panel_blockers, 'attempts': attempt_summary, 'batches': batches,
+                'planned_batches': planned_batches}
     else:
         raise GateError('Unknown command.')
     save(root, project)
@@ -1891,7 +1894,7 @@ def parser():
         if name == 'begin-batch':
             sub.add_argument('--plan', required=True)
             sub.add_argument('--prompt', required=True)
-        if name == 'preflight':
+        if name in ('preflight', 'status'):
             sub.add_argument('--plan')
         if name == 'split-batch':
             sub.add_argument('--batch', required=True)

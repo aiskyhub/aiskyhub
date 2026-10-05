@@ -55,7 +55,7 @@ $comicCli = '本技能 scripts/comic_pipeline.py 的绝对路径'
 | qa-inputs | 新参考：--file 图像，加 --bindings 绑定文件或 --characters ID…；已登记参考：--reference ID；pending 画格：--panel ID --attempt N --file 图像 | 只读输出 QA 所需图像与输入指纹，不生成检查结论 |
 | register-reference | --file 图像 --qa 报告JSON；--bindings 绑定JSON 或 --characters 角色ID… | 登记基准并返回 reference_id；--characters 便捷入口绑定 base |
 | bind-panel | --panel ID --bindings 绑定JSON | 明确绑定形态和参考 ID，不修改冻结剧情 |
-| begin-batch | --plan 批次计划JSON --prompt 实际提示词TXT | 全组检查后一次登记 1–4 格尝试；返回实际画格、复用格和参考 |
+| begin-batch | --plan 含canvas_pixels的批次计划JSON --prompt 实际提示词TXT | 容量与全组条件通过后一次登记非空画格组；部分复用须先重排，无固定格数上限 |
 | split-batch | --batch 真实批次ID --file 原图 --regions 像素格区JSON | 归档原图并无损提取，像素不足逐格拒绝；不自动验收 |
 | finish-panel | --panel ID --attempt 尝试号 --file 图像 --qa 报告JSON | 校验并复制通过的画格 |
 | fail-panel | --panel ID --attempt 尝试号 --reason 原因 [--outcome failed/cancelled/stale] | 即使锁失效也可结算旧 pending；不重置尝试上限 |
@@ -64,15 +64,15 @@ $comicCli = '本技能 scripts/comic_pipeline.py 的绝对路径'
 | export | 无 | 导出离线阅读器、PDF、CBZ |
 | verify-export | 无 | 验证实际交付内容与顺序 |
 | complete | --file 最终报告JSON | 记录真实最终验收 |
-| status | 无 | 核验进度、逐格阻塞、未结算尝试与原稿警告 |
+| status | [--plan 单批计划或分组队列JSON] | 核验进度、逐格阻塞、未结算尝试与原稿警告；提供计划时返回容量和复用清单 |
 | script-chapter | --chapter ID | 只读取所需章节及相关人物、场景和相邻状态 |
 | set-script-chapter | --chapter ID --file 章节JSON | 合并单章修改并使全书锁失效 |
 | impact | --file 候选完整剧本JSON | 只读报告修改影响 |
-| preflight | [--plan 单批计划或分组队列JSON] | 统计画格尝试、生成批次、pending 与剩余任务；按所给分组估算调用 |
+| preflight | [--plan 单批计划或分组队列JSON] | 统计画格尝试、生成批次、pending 与剩余任务；返回 planned_batches 容量与复用清单，估算调用 |
 
 `init` 不调用模型；`set-script` 不替你编剧；`review` 不代替阅读；`begin-batch` 不自动出图；`split-batch` 不自动通过 QA；`compose` 不重绘画面。模型负责这些创作与判断，脚本负责可靠的机械步骤。
 
-生产队列：先跑 status，恢复 pending 批次，再按画质规划未完成格。begin-batch 返回 generation_required=false 时全部复用，不出图；否则只绘制 panels 中的实际画格，并使用返回的 prompt 文件。拿到图后 split-batch，再逐格 qa-inputs 与 finish/fail。pending 必须结算后才能重试；分组变化不刷新三次上限。
+生产队列：先跑 status，恢复 pending 批次，再按画布容量和画质规划未完成格。preflight --plan 的 planned_batches 返回最低所需画布、复用/待生成/pending 清单；混有复用格时移除它们，重新排满画布并重写提示词，再启动。begin-batch 对部分复用计划拒绝且不登记尝试；返回 generation_required=false 时全部复用，不出图。否则只绘制 panels 中的实际画格，并使用返回的 prompt 文件。拿到图后 split-batch，再逐格 qa-inputs 与 finish/fail。适合的失败格可合并返修，pending 必须结算后才能重试；分组变化不刷新三次上限。
 
 页面与交付文件有 input_hash。用 project.json 中最新 layout.input_hash 和 layout.pages[].id 填入对应报告；不要沿用旧报告或猜页数。
 
@@ -80,6 +80,6 @@ $comicCli = '本技能 scripts/comic_pipeline.py 的绝对路径'
 
 `preflight_counts.initial_panel_attempt_budget` 是首次全稿按每格三次计算的预算，不包含未规划的后续视觉修订。`attempts_recorded`/`pending_attempts` 保留全部历史与未结算次数；`current_input_attempt_slots` 只合计参考有效的当前输入尚余次数，参考缺失的画格计入 `panels_with_unknown_budget`，不能当作零预算或宣称可直接开工。`attempts[].current_input` 为 true/false/null；null 表示因参考无效无法核对输入，旧 pending 仍应结算，不抹除历史。
 
-新版初始化自动归档输入到 source/originals，数据统一使用 schema_version=3。其他版本明确拒绝，不提供迁移，不修改旧项目。详细字段及示例见 schemas.md。
+新版初始化自动归档输入到 source/originals，数据统一使用 schema_version=4。其他版本明确拒绝，不提供迁移，不修改旧项目。详细字段及示例见 schemas.md。
 
 `preflight_counts.generation_batches_recorded` 是登记批次数，batches_with_raw 是已归档输出的批次数；它们不是平台计费计数或剩余额度。pending_batches 按仍含 pending 格的批次统计。planned_generation_calls 仅在传入 --plan 时按该分组中尚未通过且不在 pending 的画格估算，未传时为 null；ungrouped_panels_remaining 显示尚未纳入估算的格数。计划包含被阻塞格时仍须查看 panel_blockers，不能把估算当作已具备生成条件。
