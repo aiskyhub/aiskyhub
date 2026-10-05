@@ -599,7 +599,7 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("秦羽仰望星空", vol1_file.read_text(encoding='utf-8'))
         self.assertIn("海怪盘踞", vol2_file.read_text(encoding='utf-8'))
 
-        # 3. 验证以第1卷切割文本初始化该卷独立制作工作区，并验证生成该卷 README.md
+        # 3. 验证以第1卷切割文本初始化该卷独立制作工作区，并验证生成该卷 docs 模块与精简 README.md
         vol1_project = book_dir / '第1卷'
         vol1_init = cp.run(Namespace(
             command='init',
@@ -611,15 +611,33 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(vol1_init['title'], '星辰变')
         self.assertEqual(vol1_init['volume'], '第1卷')
         self.assertTrue((vol1_project / 'project.json').is_file())
+
+        # 验证分卷 docs 目录及 6 个模块化文件
+        vol1_docs = vol1_project / 'docs'
+        self.assertTrue(vol1_docs.is_dir(), "分卷目录下应建立 docs/ 模块文件夹")
+        for doc_file in ('info.md', 'status.md', 'commands.md', 'structure.md', 'notes.md', 'deliverables.md'):
+            self.assertTrue((vol1_docs / doc_file).is_file(), f"分卷 docs/{doc_file} 应存在")
+
+        self.assertIn("《星辰变》· 第1卷 基本信息", (vol1_docs / 'info.md').read_text(encoding='utf-8'))
+        self.assertIn("制作状态看板", (vol1_docs / 'status.md').read_text(encoding='utf-8'))
+        self.assertIn("常用操作命令速查", (vol1_docs / 'commands.md').read_text(encoding='utf-8'))
+        self.assertIn("工程目录结构", (vol1_docs / 'structure.md').read_text(encoding='utf-8'))
+        self.assertIn("关键注记与特别要求", (vol1_docs / 'notes.md').read_text(encoding='utf-8'))
+        self.assertIn("导出品交付路径", (vol1_docs / 'deliverables.md').read_text(encoding='utf-8'))
+
+        # 验证精简的卷根目录 README.md（作为索引与导航）
         vol1_readme = vol1_project / 'README.md'
         self.assertTrue(vol1_readme.is_file(), "分卷目录下应自动生成 README.md")
         vol1_readme_text = vol1_readme.read_text(encoding='utf-8')
         self.assertIn("《星辰变》· 第1卷 漫画制作工程", vol1_readme_text)
-        self.assertIn("本卷基本信息", vol1_readme_text)
-        self.assertIn("制作状态看板", vol1_readme_text)
-        self.assertIn("本卷工程目录结构", vol1_readme_text)
-        self.assertIn("本卷常用操作命令速查", vol1_readme_text)
-        self.assertIn("导出品交付路径", vol1_readme_text)
+        self.assertIn("本卷关键状态速览", vol1_readme_text)
+        self.assertIn("本卷模块化文档导航", vol1_readme_text)
+        self.assertIn("docs/info.md", vol1_readme_text)
+        self.assertIn("docs/status.md", vol1_readme_text)
+        self.assertIn("docs/commands.md", vol1_readme_text)
+        self.assertIn("docs/structure.md", vol1_readme_text)
+        self.assertIn("docs/notes.md", vol1_readme_text)
+        self.assertIn("docs/deliverables.md", vol1_readme_text)
 
 
 if __name__ == '__main__':
