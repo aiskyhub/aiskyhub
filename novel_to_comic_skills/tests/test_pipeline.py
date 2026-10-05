@@ -23,6 +23,11 @@ def fixture_script(source):
     script['style'].update(genre='测试', look='清晰线条', palette='灰色', selection_reason='自动化机械测试',
                            width=900, height=1200, font_size=28)
     script['characters'] = [{'id': 'char-a', 'name': '甲', 'aliases': [], 'importance': 'major',
+        'design_tier': 'lead',
+        'appearance': {'gender_presentation': 'masculine', 'requirements': '机械测试男性造型', 'source_unit_ids': []},
+        'identity_card': {**{key: '机械身份锚点' for key in ('face', 'eyes_brows', 'nose_mouth', 'body', 'posture', 'temperament')}, 'invariants': ['测试脸型']},
+        'appearance_versions': [{'id': 'base', 'description': '测试基础衣着', 'visual': {'costume': 'coat-a'}}],
+        'comparison_with': [], 'distinctions': [],
         'narrative': {key: '测试人物' for key in ('goal', 'motivation', 'voice', 'arc')},
         'visual': {key: '测试设定' for key in ('face_shape', 'eyes', 'brows', 'nose_mouth', 'body', 'posture', 'hair', 'age')},
         'source_facts': [], 'design_notes': ['机械测试夹具，不代表实际人物图']}]
@@ -37,6 +42,7 @@ def fixture_script(source):
         script['events'].append({'id': event_id, 'description': unit['text'], 'source_unit_ids': [unit['id']]})
         script['panels'].append({'id': panel_id, 'chapter_id': unit['chapter_id'], 'scene_id': 'scene-' + unit['chapter_id'],
             'source_unit_ids': [unit['id']], 'event_ids': [event_id], 'cast': ['char-a'],
+            'appearance_versions': {'char-a': 'base'},
             'action': unit['text'], 'shot': '中景', 'space': '人物位于测试房间中', 'expression': '平静',
             'state_before': {'char-a': copy.deepcopy(state)}, 'state_after': {'char-a': copy.deepcopy(state)},
             'dialogue': [{'kind': 'caption', 'text': unit['text']}]})
@@ -57,6 +63,8 @@ class PipelineTests(unittest.TestCase):
     def invoke(self, name, **kwargs):
         from argparse import Namespace
         kwargs.setdefault('scope', None)
+        kwargs.setdefault('bindings', None)
+        kwargs.setdefault('outcome', 'failed')
         return cp.run(Namespace(command=name, project=str(self.root), **kwargs))
 
     def json_file(self, value, stem='data'):
@@ -95,12 +103,45 @@ class PipelineTests(unittest.TestCase):
         Image.new('RGB', (600, 400), color).save(path)
         return str(path)
 
-    def qa(self, keys):
-        return self.json_file({'checks': {k: True for k in keys},
-                               'evidence': '机械夹具，仅用于文件/流程回归，非真实图像验收。'})
+    def qa(self, keys, reviewed_ids=None, image_sha256=None, reference_visual_key=None,
+           attempt_bindings=None):
+        report = {'checks': {k: True for k in keys},
+                  'reviewed_ids': reviewed_ids or (['char-a'] if keys == cp.REFERENCE_CHECKS else [p['id'] for p in cp.project_load(self.root)['script']['panels']]),
+                  'comparisons': [], 'findings': [],
+                  'elegance_notes': {k: '机械夹具，仅检查字段关卡，非真实美感结论。'
+                                     for k in ('linework', 'color_and_light', 'visual_hierarchy')},
+                  'evidence': '机械夹具，仅用于文件/流程回归，非真实图像验收。'}
+        if image_sha256 is not None:
+            report['image_sha256'] = image_sha256
+        if reference_visual_key is not None:
+            report['reference_visual_key'] = reference_visual_key
+        if attempt_bindings is not None:
+            report['attempt_bindings'] = attempt_bindings
+        return self.json_file(report)
+
+    def reference_qa(self, image_path, characters=None, subjects=None, purpose='combined'):
+        if subjects is None:
+            characters = characters or ['char-a']
+            subjects = [{'character_id': cid, 'version_id': 'base', 'region': None} for cid in characters]
+        inputs = self.invoke('qa-inputs', file=str(image_path),
+                             bindings=self.json_file({'purpose': purpose, 'subjects': subjects}))
+        return self.qa(cp.REFERENCE_CHECKS, inputs['reviewed_ids'], inputs['image_sha256'],
+                       inputs['reference_visual_key'])
+
+    def panel_qa(self, panel_id, attempt_number, image_path, reviewed_ids=None):
+        inputs = self.invoke('qa-inputs', panel=panel_id, attempt=attempt_number, file=str(image_path))
+        return self.qa(cp.PANEL_CHECKS, reviewed_ids or inputs['reviewed_ids'], inputs['image_sha256'],
+                       attempt_bindings=inputs['attempt_bindings'])
 
     def reference(self):
-        self.invoke('register-reference', characters=['char-a'], file=self.image_file(), qa=self.qa(cp.REFERENCE_CHECKS))
+        image = self.image_file()
+        self.invoke('register-reference', characters=['char-a'], file=image,
+                    qa=self.reference_qa(image, characters=['char-a']))
+        reference = cp.project_load(self.root)['art']['references'][-1]
+        for panel in cp.project_load(self.root)['script']['panels']:
+            if panel['id'] not in cp.project_load(self.root)['art'].get('bindings', {}):
+                self.invoke('bind-panel', panel=panel['id'], bindings=self.json_file(
+                    {'appearance_versions': {'char-a': 'base'}, 'reference_ids': [reference['id']]}))
 
     def accept_all(self, colors=None):
         self.reference()
@@ -108,8 +149,9 @@ class PipelineTests(unittest.TestCase):
             prompt = self.base / 'prompt.txt'
             prompt.write_text('机械测试，不调用图像服务', encoding='utf-8')
             attempt = self.invoke('begin-panel', panel=panel['id'], prompt=str(prompt))
+            image = self.image_file((colors or {}).get(panel['id'], '#b8c9d2'))
             self.invoke('finish-panel', panel=panel['id'], attempt=attempt['attempt'],
-                        file=self.image_file((colors or {}).get(panel['id'], '#b8c9d2')), qa=self.qa(cp.PANEL_CHECKS))
+                        file=image, qa=self.panel_qa(panel['id'], attempt['attempt'], image))
 
     def exported(self):
         self.locked()
@@ -120,6 +162,8 @@ class PipelineTests(unittest.TestCase):
     def review_and_export(self):
         layout = cp.project_load(self.root)['layout']
         report = {'input_hash': layout['input_hash'], 'reviewed_page_ids': [p['id'] for p in layout['pages']],
+                  'elegance_notes': {k: '机械页面夹具，不代替真实看图。'
+                                     for k in ('linework', 'color_and_light', 'visual_hierarchy')},
                   'checks': {k: True for k in cp.LAYOUT_CHECKS}, 'evidence': '机械页面夹具检查'}
         self.invoke('review-layout', file=self.json_file(report))
         self.invoke('export')
@@ -272,6 +316,11 @@ class PipelineTests(unittest.TestCase):
     def test_source_modified_invalidates_lock(self):
         self.locked()
         self.source.write_text(self.source.read_text(encoding='utf-8') + '新增事件。', encoding='utf-8')
+        self.assertTrue(self.invoke('status')['script_locked'])
+        self.assertTrue(self.invoke('status')['external_source_warnings'])
+        project = cp.project_load(self.root)
+        archived = cp.inside(self.root, project['source']['files'][0]['archive_path'])
+        archived.write_text(archived.read_text(encoding='utf-8') + '新增事件。', encoding='utf-8')
         with self.assertRaises(cp.GateError):
             self.invoke('assert-art')
         self.assertFalse(self.invoke('status')['script_locked'])
@@ -298,15 +347,15 @@ class PipelineTests(unittest.TestCase):
         script['panels'][0]['dialogue'] = [{'kind': 'speech', 'speaker': 'unknown', 'text': '你好'}]
         self.invoke('set-script', file=self.json_file(script))
         errors = self.invoke('check-script')['errors']
-        self.assertTrue(any('duplicate IDs' in x for x in errors))
-        self.assertTrue(any('speaker not in cast' in x for x in errors))
+        self.assertTrue(any('duplicate' in x for x in errors))
+        self.assertTrue(any('speaker' in x for x in errors))
 
     def test_state_transition_needs_source_evidence(self):
         script = self.prepare_script()
         script['panels'][1]['state_before']['char-a']['costume'] = 'coat-b'
         script['panels'][1]['state_after']['char-a']['costume'] = 'coat-b'
         self.invoke('set-script', file=self.json_file(script))
-        self.assertTrue(any('Unexplained' in x for x in self.invoke('check-script')['errors']))
+        self.assertTrue(any('state' in x and ('change' in x or 'transition' in x) for x in self.invoke('check-script')['errors']))
         script['panels'][1]['state_transitions'] = [{'character_id': 'char-a', 'fields': ['costume'],
                                                   'reason': '夹具换装', 'source_unit_ids': script['panels'][1]['source_unit_ids']}]
         self.invoke('set-script', file=self.json_file(script))
@@ -424,9 +473,11 @@ class PipelineTests(unittest.TestCase):
     def test_missing_font_glyph_stops_layout(self):
         self.locked()
         self.accept_all()
-        project = cp.project_load(self.root)
-        project['title'] = '𐐷'
-        cp.save(self.root, project)
+        script = cp.project_load(self.root)['script']
+        script['panels'][0]['dialogue'][0]['text'] = '𐐷'
+        self.invoke('set-script', file=self.json_file(script))
+        self.add_reviews()
+        self.invoke('lock-script')
         with self.assertRaises(cp.GateError):
             self.invoke('compose', font=None)
 

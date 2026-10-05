@@ -31,3 +31,7 @@
 每轮记录实际检查的章节、发现、修订和证据。发现 major/critical 问题修订并重查。稿件变化后重做受影响的内容，并在全书层面核对三个报告均针对最新完整版本。不得只更换旧报告的 hash。
 
 `check-script` 无错误后才提交审查报告；三类报告均真实通过后执行 `lock-script`。脚本的三类报告要求是行为约束，不代表三名独立评审者或自动语义判别。
+
+## 页面叙事与长篇上下文
+
+每页填写 narrative：purpose、new_information、emotion、focus_panel_id、page_turn。重点与翻页服务原文信息与情绪，收尾可明确写结束而无需新增悬念。按需使用 script-chapter 读取章节及相关档案，用 set-script-chapter 合并受影响章节，impact 检查修改范围；最终仍做通篇结构、覆盖、连续性和漫画表达审查。测试样例的人物与故事只用于验证，不带入用户作品。

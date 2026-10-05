@@ -35,6 +35,16 @@ aiskyhub/
 
 技能目录包含 `agents/`、`references/`、`scripts/`、`assets/` 和 `tests/`，作品资料及图像保存在各自作品项目中。
 
+新版为角色记录身份特征卡、设计层级和形态版本，画格显式绑定参考，新增参考不会替换旧画格。支持过期尝试结算、原稿归档、章节更新和影响查询。固定页漫与按行分段条漫均支持不等宽双格、字体内容指纹、独立文字带及可编辑气泡。数据统一使用 schema_version=2，不提供旧结构转换或旧图重验收接口。
+
+人物美感、男女外观和辨识度由主代理实际看图确认。自动化测试中的色块与模拟报告只检查结构和状态；`tests/fixtures` 中的原创短篇用于隔离验收，不作为其他作品的人设。
+
+使用含 Pillow、reportlab、pypdf 等依赖的 Python 运行回归测试：
+
+```text
+python -B -m unittest discover -s novel_to_comic_skills/tests -v
+```
+
 ## Codex
 
 Codex 可以通过 marketplace source 管理插件市场。

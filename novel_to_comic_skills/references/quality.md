@@ -15,6 +15,16 @@ coverage 检查全部正文和结束位置；continuity 检查因果、时间、
 `angles_and_expressions`：常用角度、表情和比例一致。
 `source_faithfulness`：原作事实与自由美术设计清楚区分，服从原作。
 
+`gender_readability`：女性造型清晰，男性造型清晰；英气/强势女性仍保持女性面部与体态。原作规定的特殊表达须查实来源。
+`body_design`：肩颈、头身、身体比例、姿态与个人轮廓协调，符合年龄与人设。
+`design_tier_fit`：男女主角五官、体态、表情与服饰完成度精致，重要配角有独立设计，路人结构正确并保持合理细节层级。
+
+参考报告必须含 reviewed_ids、comparisons、findings；comparisons 记录实际比较的角色与面部、体态、表现差异。findings 保存缺陷、严重度、处理和复查结果；没有缺陷时用空数组。不要用自动人脸阈值代替主代理看图。
+
+图像报告的 `image_sha256` 对应本次真正查看的文件内容；相同人物 ID 不代表可以给另一张图复用旧报告。参考报告另用 `reference_visual_key` 绑定当前设计与参考语义，画格报告用 `attempt_bindings` 绑定实际尝试与视觉输入。机械字段通过 `qa-inputs` 读取，格式见 [schemas.md](schemas.md)。原图、参考或输入发生变化后重新看图和记录；每次报告与尝试保留历史，新增通过结论只能来自明确检查。
+
+参考、正文与页面均检查 `visual_elegance`。报告必须有 `elegance_notes`，逐项记录 `linework`（轮廓与内线、杂乱刻线或纹理）、`color_and_light`（肤色、暗面、配色与光源）、`visual_hierarchy`（视觉中心、背景简化与留白；页面另看疏密和文字层级）的实际观察。遵循已冻结题材风格；清透不是把夜景一律提亮，简洁也不是省略关键表情或道具。用户指出画面脏时，先定位具体纹理、杂物、色偏或层次问题再修图，未重绘复查的旧图不能换成通过结论。
+
 ## 正文画格
 
 `identity`：各人身份与对应区域清楚，未融合或换脸。
@@ -22,6 +32,8 @@ coverage 检查全部正文和结束位置；continuity 检查因果、时间、
 `composition`：动作时刻、景别、空间、阅读和信息揭示正确；主要视觉中心清楚，前中后景、留白和文字预留区符合本格用途。
 `drawing_quality`：结构、手肢、道具、背景和线条达到锁定画风的要求；与项目 art_direction 和基准图比较造型、明暗、配色、背景详略和特效。
 `no_unwanted_text`：画面无错误对白、随机字符或水印。
+
+正文同时检查 gender_readability、distinctiveness、body_design、design_tier_fit。报告的 reviewed_ids 指向实际画格，findings 保存本次发现；角色换角度、换表情、换装后仍可辨，主角保持精致，女性不无依据中性化，人物不向通用脸漂移。引用真实参考 ID 与形态版本说明比较结果。
 
 ## 成品页面
 

@@ -1,10 +1,10 @@
-# 项目与数据契约（版本 1）
+# 项目与数据契约（版本 2）
 
-`project.json` 由 helper 创建和更新，包含 source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。schema_version 不匹配时保留项目并显式迁移。
+`project.json` 由 helper 创建和更新，包含 source、script、reviews、script_lock、art、layout、exports、final_review。不要直接更改 source、锁、尝试号或完成记录来放行。编剧时在当前状态目录的 `scripts/` 中写完整 script JSON，通过 set-script 导入；报告保存到 `reports/`。统一项目布局见 [commands.md](commands.md)，原文新版本的内部状态目录见 [recovery.md](recovery.md)。仅支持 schema_version=2；不转换旧结构，也不补历史通过结论。
 
 ## Source
 
-files 记录输入绝对路径、格式、编码和 SHA256；chapters 使用顺序 ID（不以原章号为唯一键），保留标题、正文存在性、阅读记录；units 记录 id、chapter_id、kind、text、locator。TXT 用行号，DOCX 用段落/注释位置，PDF 用页与行，EPUB 用 spine/member/段落。
+files 记录原始输入绝对路径、项目内 archive_path、格式、编码和 SHA256；制作使用归档副本，外部原稿变化单独警告；chapters 使用顺序 ID（不以原章号为唯一键），保留标题、正文存在性、阅读记录；units 记录 id、chapter_id、kind、text、locator。TXT 用行号，DOCX 用段落/注释位置，PDF 用页与行，EPUB 用 spine/member/段落。
 
 读取 `chapter` 的输出获取真实 unit ID，不猜编号。所有正文 unit 均需映射，章标题本身不用绘制。source_index_hash 覆盖不可变来源索引，阅读笔记不改变它。issues 需要逐项查明；空章可通过注明确实无正文解决，不代表补画该章。
 
@@ -29,7 +29,7 @@ panels 数组就是全书镜头顺序；pages 按此顺序覆盖每格恰好一�
 
 art_direction 的字段及决策方法见 [art-direction.md](art-direction.md)；模板的默认规范需按本作调整。references 的建议记录为 `{work,url,scope,access,observations,adaptation}`，access=viewed/metadata_only/unavailable；仅在实际看过画页时填写具体观察，不要求为了锁定剧本额外上网。已有项目可以沿用原来的 style，补美术规范时通过 set-script 正常重审。
 
-rows 为画格 ID 数组的数组，例如 `[["p1"],["p2","p3"],["p4"]]`；每行一格占满可用宽度，两格平分宽度；展平后必须与 panel_ids 完全一致。rtl 仅改变一行的物理摆放，JSON 保持阅读顺序。省略 rows 时按 columns 自动分行，末行只有一格则使用整宽。
+rows 为画格 ID 数组的数组，例如 `[["p1"],["p2","p3"],["p4"]]`；每行一格占满可用宽度，两格默认平分，可用 row_weights 调整；展平后必须与 panel_ids 完全一致。rtl 仅改变一行的物理摆放，JSON 保持阅读顺序。省略 rows 时按 columns 自动分行，末行只有一格则使用整宽。
 
 状态按角色 ID 保存对象，例如 `{ "form":"base", "costume":"coat-a", "injuries":[], "items":[], "location":"room-a", "knowledge":[] }`。各 cast 都有 state_before/after。相邻出场的已记录状态发生变化时，在当前格 state_transitions 填 `{character_id,fields,reason,source_unit_ids}`，解释状态间变化；直接呈现的变化仍要在 action/events 中有依据。
 
@@ -56,11 +56,11 @@ coverage 检查项：all_source_read/events_preserved/arcs_preserved/ending_pres
 continuity：causality/timeline/identity/states/knowledge_and_reveals。
 comic：drawable_panels/dialogue_and_speakers/reading_order/pacing/text_density。
 
-参考图报告检查项：identity/distinctiveness/angles_and_expressions/source_faithfulness。
-画格报告：identity/continuity/composition/drawing_quality/no_unwanted_text。
-以上视觉报告共同需要非空 evidence。
+参考图报告检查项：identity/distinctiveness/angles_and_expressions/source_faithfulness/gender_readability/body_design/design_tier_fit/visual_elegance。
+画格报告：identity/continuity/composition/drawing_quality/no_unwanted_text/gender_readability/distinctiveness/body_design/design_tier_fit/visual_elegance。
+以上视觉报告共同需要非空 evidence、实际 reviewed_ids、image_sha256 与 findings；参考还需 comparisons 和 reference_visual_key，画格还需 attempt_bindings（具体格式见下文）。
 
-页面报告另外需要 `input_hash` 和全部实际 `reviewed_page_ids`；检查项 text_accuracy/reading_order/speaker_assignment/face_visibility。
+页面报告另外需要 `input_hash` 和全部实际 `reviewed_page_ids`；检查项 text_accuracy/reading_order/speaker_assignment/face_visibility/visual_elegance。
 最终报告需要 `input_hash`；检查项 source_scope/story_complete/visual_consistency/exports_opened。
 
 ## Artifacts 与版本
@@ -71,4 +71,39 @@ layout 保存全部实际页面/分段、画格顺序、字体和 PNG 指纹；e
 
 页面指纹包含排版器版本；更新排版实现后需要重新 compose、实际看页、review-layout 和 export。画格输入不变时复用有效绘图，无需重新生成。
 
-额外场景/道具图片参考写入对应对象的 reference_paths/reference_hashes；改变该对象会使关联绘图失效。发出提示词前核验这些参考文件的实际哈希并记录到提示词。
+额外场景/道具图片参考写入对应对象的 reference_paths/reference_hashes，均使用项目内相对路径与实际 SHA256，数组长度一致。画格通过 prop_ids 指定使用的道具；发出提示词前核验真实文件内容，改变参考会使关联绘图失效。
+
+
+## V2 人物与制作绑定
+
+character 保留 importance，新增 design_tier=lead/core/background；appearance={gender_presentation,requirements,source_unit_ids}，gender_presentation=feminine/masculine/source_defined，表示美术表达而非程序推断身份。source_defined 必须说明原作特殊设定及有效来源。identity_card 包含 face/eyes_brows/nose_mouth/body/posture/temperament 非空描述及非空 invariants 数组。
+
+appearance_versions 是包含 base 的数组，每项含 id、description、非空 visual 对象；版本 visual 描述形态差异，保留身份锚点。comparison_with 指定需比较的角色；distinctions 含 other_character_id、至少两项 face_differences、body_difference、performance_difference。原作要求相似性时用 source_exception={reason,source_unit_ids} 替代强行差异。
+
+参考登记绑定文件：
+```json
+{"purpose":"combined","subjects":[{"character_id":"角色ID","version_id":"base","region":null}]}
+```
+purpose=portrait/full_body/turnaround/expressions/pose/combined；region=null 或归一化 [x,y,w,h]，多人板应明确区域。登记返回 reference_id。
+
+画格在文本剧本中必须指定每位 cast 的 appearance_versions；绘制前通过 bind-panel 提交生产绑定：
+```json
+{"appearance_versions":{"角色ID":"base"},"reference_ids":["登记返回的真实ID"]}
+```
+绑定存入 art.bindings，不修改冻结剧情，必须覆盖实际 cast 的正确形态。一个画格可组合多张角度/表情参考；新参考不替换旧绑定。参考错人、错形态或内容变化会阻塞。空 cast 的环境格可使用空人物绑定。
+
+报告检查项见上文 Reports。参考 reviewed_ids 为真实人物 ID，正文为画格 ID；comparisons=[{character_ids:[A,B],evidence}] 记录真实比较。`image_sha256` 必须匹配实际验收文件。参考、正文与页面共同含 `elegance_notes={linework,color_and_light,visual_hierarchy}`，各项为实际观察的非空描述，分别说明线条、颜色光线和视觉层次。填写布尔值不替代看图，重大未解决缺陷不能通过。
+
+参考报告的 `reference_visual_key` 绑定图像内容、角色设计、用途与角色/版本/区域；画格的 `attempt_bindings={"实际画格ID":{"attempt":实际尝试号,"render_hash":"实际视觉输入指纹"}}` 绑定本次尝试。使用 `qa-inputs` 读取这些机械字段，再由主代理实际看图填写证据与检查结论；命令不生成通过报告。`begin-panel` 同时返回 render_hash。登记同图、同设计与同参考语义的新 ID 不会刷新视觉输入的尝试预算，参考区域或用途发生实际变化则需要复核。
+
+## V2 页面、气泡与影响范围
+
+page.narrative={purpose,new_information,emotion,focus_panel_id,page_turn} 用于记录页面任务、信息、情绪、重点与翻页关系；新增创作应填写。page.row_weights 可与实际 rows 平行，例如 [[1],[0.6,0.4],[1]]，每行数量对应画格且所有权重大于零。rtl 按叙事顺序反转物理摆放，保留不等宽画格自己的权重。
+
+panel.aspect_ratio 为目标宽高比。完整图像等比例容纳，不能裁掉叙事内容。改画幅先检查构图；同样的图像可完整容纳时重新排版，明确需要构图变化时修改 visual_plan 并返修。
+
+lettering_mode=band/bubbles（画格优先于 style，默认 band）。bubbles 模式每句对白恰好对应一项 bubbles={dialogue_index,rect:[x,y,w,h],tail:[x,y]或null,order}；坐标为画格图像区的归一化坐标，order 从 0 连续且不重复。文字及说话人只取 dialogue。可用 protected_regions=[归一化矩形] 指定必须避让区域；程序检查几何碰撞，主代理仍亲自检查面部与动作。
+
+compose 保存可编辑排版 manifest、字体内容及各页面指纹。页漫画布严格等于 width×height，内容溢出时调整相应页面的行、气泡或分格并重审；条漫按完整行拆为不超过 max_segment_height 的片段。字号、字体、页序、对白和气泡变化只更新排版；视觉风格、角色造型、动作、构图和实际参考变化才影响绘图。
+
+script-chapter 输出章节集合及相关人物、场景与相邻状态；set-script-chapter 仅合并该章的 events/scenes/panels/pages，完整冻结关卡仍检查全书。impact 对候选完整剧本给出修改影响且不写项目。
